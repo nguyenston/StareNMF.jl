@@ -1,3 +1,3 @@
 [submodule "submodule/MuSiCal"]
-	path = submodules/MuSiCal
+	path = submodule/MuSiCal
 	url = https://github.com/parklab/MuSiCal.git
