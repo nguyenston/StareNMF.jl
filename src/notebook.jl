@@ -164,6 +164,8 @@ begin
 end
 
 # ╔═╡ ba274fa6-cf7f-47b4-a787-d7ed328871a3
+# ╠═╡ disabled = true
+#=╠═╡
 begin
 	local avg_diffs = Float64[]
 	local max_diffs = Float64[]
@@ -194,6 +196,7 @@ begin
 	axislegend(ax)
 	fig
 end
+  ╠═╡ =#
 
 # ╔═╡ 978de3ab-cfe5-49b8-aea4-c1fff9e96c60
 function plot_losses(losses, rho; kwargs...)
@@ -219,20 +222,32 @@ function rank_determination(X; ks, rho, approx_type, kwargs...)
 end
 
 # ╔═╡ 2a4ac0fe-8752-4cce-b4d6-4941a4e93599
+# ╠═╡ disabled = true
+#=╠═╡
 rank_determination(X[(cancer, "none")]; rho=collect(0:0.01:10), approx_type=Util.KDEUniform, 
 	ks=1:nrow(loadings)+3, multiplier=500, plot_title="Not misspecified")
+  ╠═╡ =#
 
 # ╔═╡ a13b180c-b443-4e9d-8437-01d67d2c3691
+# ╠═╡ disabled = true
+#=╠═╡
 rank_determination(X[(cancer, "contaminated")]; rho=collect(0:0.01:10), approx_type=Util.KDEUniform, 
 	ks=1:nrow(loadings)+3, multiplier=500, plot_title="Contaminated")
+  ╠═╡ =#
 
 # ╔═╡ 0d961f8c-5f4c-47e9-92b4-5193c051743b
+# ╠═╡ disabled = true
+#=╠═╡
 rank_determination(X[(cancer, "perturbed")]; rho=collect(0:0.01:10), approx_type=Util.KDEUniform, 
 	ks=1:nrow(loadings)+3, multiplier=500, plot_title="Perturbed")
+  ╠═╡ =#
 
 # ╔═╡ 05e8316a-e797-4142-8211-5c8a5c11d4ca
+# ╠═╡ disabled = true
+#=╠═╡
 rank_determination(X[(cancer, "overdispersed")]; rho=collect(0:0.01:10), approx_type=Util.KDEUniform, 
 	ks=1:nrow(loadings)+3, multiplier=500, plot_title="Overdispersed")
+  ╠═╡ =#
 
 # ╔═╡ Cell order:
 # ╟─627df66e-cbc7-11ee-0e3e-c770eabc3dde
