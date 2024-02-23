@@ -3,9 +3,8 @@ include("StareNMF/StareNMF.jl")
 using Distributions
 using LinearAlgebra
 using NMF
-using .SyntheticData
-using .Util
 using .StareNMF
+using .StareNMF.Utils
 
 using GLMakie
 using CairoMakie
@@ -16,7 +15,7 @@ function main()
   diri = Dirichlet(4K, 0.1)
   W = rand(diri, K)
   H = 100 * rand(K, 100)
-  X = make_count_matrix(W, H)
+  X = count_matrix_from_WH(W, H)
 
   empirical_eps = generate_empirical_eps_sets(X, W, H, PiecewiseUniform)
   componentwise_loss = sum(distance_from_standard_uniform.(empirical_eps); dims=1)

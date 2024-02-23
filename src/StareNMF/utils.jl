@@ -1,5 +1,5 @@
 module Utils
-export invcdf, plot_signature
+export invcdf, plot_signature, count_matrix_from_WH
 
 using Distributions
 using Makie
@@ -40,4 +40,14 @@ function plot_signature(gridpos, signatures, sig, title)
   rowgap!(subfig, 2)
   gridpos[] = subfig
 end
+
+"""
+TODO: add documentation
+"""
+function count_matrix_from_WH(W::Matrix{T}, H::Matrix{T}) where {T<:Number}
+  V = W * H
+  distr = Poisson.(V)
+  return rand.(distr)
+end
+
 end

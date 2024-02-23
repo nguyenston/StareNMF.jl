@@ -154,7 +154,7 @@ mvnmf_model.W
 
 # ╔═╡ 6b87776f-11a7-441c-8b5b-7b23ac74ba87
 begin
-	local result = mvnmf_model
+	local result = result_none
 	local W = result.W
 	local H = result.H
 	local K, N = size(H)
@@ -191,7 +191,7 @@ begin
 end
 
 # ╔═╡ db20f24f-62f7-4f21-a538-bfc215819659
-
+Threads.nthreads()
 
 # ╔═╡ ba274fa6-cf7f-47b4-a787-d7ed328871a3
 # ╠═╡ disabled = true
