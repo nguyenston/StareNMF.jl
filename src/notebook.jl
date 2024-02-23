@@ -13,6 +13,9 @@ begin
   Pkg.instantiate()
 end
 
+# ╔═╡ 983d24f4-c094-40ab-b96b-b81048990965
+using PyCall
+
 # ╔═╡ 5546058d-11be-48f0-a4c1-036dc9a80a3a
 begin
 	include("stare_nmf.jl")
@@ -58,10 +61,10 @@ html"""
 CairoMakie.activate!(type="svg")
 
 # ╔═╡ c46c00c8-0e6c-4ea8-bb7a-6b54a29bd535
-signatures_unsorted = CSV.read("synthetic-data-2023/alexandrov2015_signatures.tsv", DataFrame; delim='\t')
+signatures_unsorted = CSV.read("../synthetic-data-2023/alexandrov2015_signatures.tsv", DataFrame; delim='\t')
 
 # ╔═╡ c493008d-df0f-4869-bbf8-d0cfe215ad48
-signatures = sort(CSV.read("synthetic-data-2023/alexandrov2015_signatures.tsv", DataFrame; delim='\t'))
+signatures = sort(CSV.read("../synthetic-data-2023/alexandrov2015_signatures.tsv", DataFrame; delim='\t'))
 
 # ╔═╡ df32599c-d8d3-4166-ada4-b7e709a849fa
 begin
@@ -84,7 +87,7 @@ end
 cancer = "liver"
 
 # ╔═╡ b8bda4a6-639f-4dff-89b8-6473cec3fe3f
-loadings = CSV.read("synthetic-data-2023/synthetic-$(cancer_categories[cancer])-GT-loadings.csv", DataFrame; header=0)
+loadings = CSV.read("../synthetic-data-2023/synthetic-$(cancer_categories[cancer])-GT-loadings.csv", DataFrame; header=0)
 
 # ╔═╡ fc462a6d-e59f-4287-a9ac-581cafb6f542
 begin
@@ -107,7 +110,7 @@ begin
 	data = Dict()
 	for (cancer, cancer_name) in pairs(cancer_categories)
 		for (mis_type, mis_type_name) in pairs(misspecification_type)
-			data[(cancer, mis_type)] =  CSV.read("synthetic-data-2023/synthetic-$(cancer_name)$(mis_type_name).tsv", DataFrame; delim='\t')
+			data[(cancer, mis_type)] =  CSV.read("../synthetic-data-2023/synthetic-$(cancer_name)$(mis_type_name).tsv", DataFrame; delim='\t')
 		end
 	end
 end
@@ -121,15 +124,39 @@ begin
 end
 
 # ╔═╡ 172d00f7-42f3-419c-bc6a-e87d9691f691
-all_loadings = npzread("synthetic-data-2023/synthetic-113-ovary-adenoca-all-loadings.npy")
+all_loadings = npzread("../synthetic-data-2023/synthetic-113-ovary-adenoca-all-loadings.npy")
 
 # ╔═╡ 627eb8be-d921-4059-81af-e5c59b4766e4
-result_none = nnmf(Float64.(X[(cancer, "none")]), 16; alg=:multdiv, maxiter=200000, replicates=10, tol=1e-4)
+result_none = nnmf(Float64.(X[(cancer, "none")]), 8; alg=:multdiv, maxiter=200000, replicates=10, tol=1e-4)
+
+# ╔═╡ da97570d-42d2-4a54-82e4-454306e8b424
+begin
+	musical = pyimport("musical")
+	local count_matrix = X[(cancer, "none")]
+	local lambda_tilde_grid = [1e-5, 3e-5, 1e-4, 3e-4, 1e-3, 3e-3, 1e-2, 3e-2, 1e-1]
+	mvnmf_model = musical.DenovoSig(count_matrix, 
+		min_n_components=8, # Minimum number of signatures to test
+		max_n_components=8, # Maximum number of signatures to test
+		init="random", # Initialization method
+		method="mvnmf", # mvnmf or nmf
+		n_replicates=10, # Number of mvnmf/nmf replicates to run per n_components
+		ncpu=10, # Number of CPUs to use
+		max_iter=100000, # Maximum number of iterations for each mvnmf/nmf run
+		bootstrap=false, # Whether or not to bootstrap X for each run
+		tol=1e-6, # Tolerance for claiming convergence of mvnmf/nmf
+		verbose=0, # Verbosity of output
+		normalize_X=false) # Whether or not to L1 normalize each sample in X before mvnmf/nmf
+	mvnmf_model.fit()
+end
+
+# ╔═╡ b0416ef3-ffd8-4200-a66c-5a8c1e44ac09
+mvnmf_model.W
 
 # ╔═╡ 6b87776f-11a7-441c-8b5b-7b23ac74ba87
 begin
-	local W = result_none.W
-	local H = result_none.H
+	local result = mvnmf_model
+	local W = result.W
+	local H = result.H
 	local K, N = size(H)
 	
 	local W_normalized_L2 = W * Diagonal(1 ./ norm.(eachcol(W), 2))
@@ -162,6 +189,9 @@ begin
 	display(avg_inferred_loadings)
 	fig
 end
+
+# ╔═╡ db20f24f-62f7-4f21-a538-bfc215819659
+
 
 # ╔═╡ ba274fa6-cf7f-47b4-a787-d7ed328871a3
 # ╠═╡ disabled = true
@@ -252,6 +282,7 @@ rank_determination(X[(cancer, "overdispersed")]; rho=collect(0:0.01:10), approx_
 # ╔═╡ Cell order:
 # ╟─627df66e-cbc7-11ee-0e3e-c770eabc3dde
 # ╠═e30fd15e-ba5d-4c7b-91a1-5238649b8b51
+# ╠═983d24f4-c094-40ab-b96b-b81048990965
 # ╠═5546058d-11be-48f0-a4c1-036dc9a80a3a
 # ╠═cffc8075-8134-4369-aad4-607f1f38970b
 # ╠═70b7302e-9598-477e-8709-72308857b2b2
@@ -269,7 +300,10 @@ rank_determination(X[(cancer, "overdispersed")]; rho=collect(0:0.01:10), approx_
 # ╠═eeebeb94-0d36-4043-8bec-868c9d19725c
 # ╠═172d00f7-42f3-419c-bc6a-e87d9691f691
 # ╠═627eb8be-d921-4059-81af-e5c59b4766e4
+# ╠═da97570d-42d2-4a54-82e4-454306e8b424
+# ╠═b0416ef3-ffd8-4200-a66c-5a8c1e44ac09
 # ╠═6b87776f-11a7-441c-8b5b-7b23ac74ba87
+# ╠═db20f24f-62f7-4f21-a538-bfc215819659
 # ╠═ba274fa6-cf7f-47b4-a787-d7ed328871a3
 # ╠═978de3ab-cfe5-49b8-aea4-c1fff9e96c60
 # ╠═6d35f0d2-4764-484f-bd3a-8773665ff780

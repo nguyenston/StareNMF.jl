@@ -1,5 +1,4 @@
-include("synthetic_data.jl")
-include("stare_nmf.jl")
+include("StareNMF/StareNMF.jl")
 
 using Distributions
 using LinearAlgebra
