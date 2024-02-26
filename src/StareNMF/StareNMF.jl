@@ -23,8 +23,7 @@ struct PiecewiseUniform{T<:AbstractFloat} <: UniformApproximate
   ledge_list::Vector{Tuple{T,T}} # for logging
   components::Vector{Tuple{T,T}} # for logging
 
-  PiecewiseUniform(components::Vector{Tuple{T,T}}; kwargs...) where {T} = begin
-    tol = haskey(kwargs, :tol) ? convert(T, kwargs[:tol]) : convert(T, 1e-4)
+  PiecewiseUniform(components::Vector{Tuple{T,T}}; tol::T=1e-4, kwargs...) where {T} = begin
     n = length(components)
     ledge_list = []
     for (a, b) in components
@@ -60,8 +59,7 @@ Distribution represented by a kernel density estimation over sample points
 struct KDEUniform{T<:AbstractFloat} <: UniformApproximate
   samples::Vector{T}
   estimated_distr::UnivariateKDE
-  KDEUniform(components::Vector{Tuple{T,T}}; kwargs...) where {T} = begin
-    multiplier = haskey(kwargs, :multiplier) ? Int(kwargs[:multiplier]) : 1
+  KDEUniform(components::Vector{Tuple{T,T}}; multiplier::Integer=1, kwargs...) where {T} = begin
     samples = T[]
     for (a, b) in components
       @assert 0 <= a <= b <= 1 "invalid component: a = $(a), b = $(b)"
@@ -100,8 +98,9 @@ function distance_from_standard_uniform(d::KDEUniform)
   return sum(valid_losses)
 end
 
-function structurally_aware_loss(X::Matrix{F}, W::Matrix{F}, H::Matrix{F};
-  rho::F, lambda, approx_type::Type{T}, kwargs...) where {T<:UniformApproximate,F<:AbstractFloat}
+function structurally_aware_loss(X::Matrix{I}, W::Matrix{F}, H::Matrix{F}, rho::F;
+  lambda::F=0.01, approx_type::Type{T}=KDEUniform,
+  kwargs...) where {T<:UniformApproximate,F<:AbstractFloat,I<:Integer}
 
   empirical_eps = generate_empirical_eps_sets(X, W, H, approx_type; kwargs...)
 
@@ -110,8 +109,9 @@ function structurally_aware_loss(X::Matrix{F}, W::Matrix{F}, H::Matrix{F};
   return sum(max.(0, componentwise_loss .- rho)) + lambda * K
 end
 
-function structurally_aware_loss(X::Matrix{F}, W::Matrix{F}, H::Matrix{F};
-  rho::Vector{F}, lambda, approx_type::Type{T}, kwargs...) where {T<:UniformApproximate,F<:AbstractFloat}
+function structurally_aware_loss(X::Matrix{I}, W::Matrix{F}, H::Matrix{F}, rho::Vector{F};
+  lambda::F=0.01, approx_type::Type{T}=KDEUniform,
+  kwargs...) where {T<:UniformApproximate,F<:AbstractFloat,I<:Integer}
 
   empirical_eps = generate_empirical_eps_sets(X, W, H, approx_type; kwargs...)
 
@@ -120,8 +120,8 @@ function structurally_aware_loss(X::Matrix{F}, W::Matrix{F}, H::Matrix{F};
   return [sum(max.(0, componentwise_loss .- rh)) + lambda * K for rh in rho]
 end
 
-function generate_empirical_eps_sets(X::Matrix{F}, W::Matrix{F}, H::Matrix{F}, approx_type::Type{T};
-  kwargs...) where {T<:UniformApproximate,F<:AbstractFloat}
+function generate_empirical_eps_sets(X::Matrix{I}, W::Matrix{F}, H::Matrix{F}, approx_type::Type{T};
+  kwargs...) where {T<:UniformApproximate,F<:AbstractFloat,I<:Integer}
 
   # sanity checking
   D_X, N_X = size(X)

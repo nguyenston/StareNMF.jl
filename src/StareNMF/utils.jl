@@ -15,7 +15,7 @@ end
 """
 use makie to plot a mutation signature
 """
-function plot_signature(gridpos, signatures, sig, title)
+function plot_signature(gridpos, signatures, sig; title="")
   s = signatures[:, sig]
   subfig = GridLayout()
 
