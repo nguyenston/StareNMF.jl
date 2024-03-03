@@ -30,13 +30,13 @@ function main()
   losses_kde = Vector{Float64}[]
   for k in 1:8
     result = nnmf(Float64.(X), k; alg=:multdiv, maxiter=30000, replicates=1)
-    push!(losses_kde, structurally_aware_loss(X, result.W, result.H, rho=rho, lambda=0.01, approx_type=KDEUniform))
+    push!(losses_kde, structurally_aware_loss(X, result.W, result.H, rho; lambda=0.01, approx_type=KDEUniform))
   end
 
   losses_piecewise = Vector{Float64}[]
   for k in 1:8
     result = nnmf(Float64.(X), k; alg=:multdiv, maxiter=30000, replicates=1)
-    push!(losses_piecewise, structurally_aware_loss(X, result.W, result.H, rho=rho, lambda=0.01, approx_type=PiecewiseUniform))
+    push!(losses_piecewise, structurally_aware_loss(X, result.W, result.H, rho; lambda=0.01, approx_type=PiecewiseUniform))
   end
 
   fig = Figure(size=(800, 1200))
