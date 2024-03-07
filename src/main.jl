@@ -57,7 +57,7 @@ function main()
 
     for misspec in keys(misspecification_type)
       println("cancer: $(cancer)\tmisspec: $(misspec)")
-      if isfile("../plots/rho-k-plots/rho-k-$(cancer_categories[cancer])$(misspecification_type[misspec]).jld2")
+      if isfile("../plots/rho-k-plots-alt/rho-k-$(cancer_categories[cancer])$(misspecification_type[misspec]).jld2")
         continue
       end
 
