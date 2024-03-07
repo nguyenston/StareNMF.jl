@@ -24,13 +24,15 @@ end
 
 function rank_determination(X, ks, rho; approx_type=StareNMF.KDEUniform, nmfargs=(), plotargs=(), kwargs...)
   losses = Array{Vector{Float64}}(undef, length(ks))
+  results = Array{NMF.Result}(undef, length(ks))
   for (i, k) in collect(enumerate(ks))
     print("k=$(k)\t")
     result = threaded_nmf(Float64.(X), k; alg=:multdiv, maxiter=200000, tol=1e-4, nmfargs...)
     print("computing losses...\t\r")
     losses[i] = StareNMF.structurally_aware_loss(X, result.W, result.H, rho; lambda=0.01, approx_type, kwargs...)
+    results[i] = result
   end
-  rho_k_losses(losses, rho; plotargs..., krange=ks), losses
+  rho_k_losses(losses, rho; plotargs..., krange=ks), losses, results
 end
 
 function main()
@@ -64,10 +66,10 @@ function main()
       rhos = collect(0:0.01:10)
       ks = 1:nrow(loadings)+3
 
-      fig, losses = rank_determination(X, ks, rhos; multiplier=500,
+      fig, losses, results = rank_determination(X, ks, rhos; multiplier=500,
         plotargs=(; plot_title="$(cancer_categories[cancer])$(misspecification_type[misspec])"),
-        nmfargs=(; alg=:greedycd, replicates=12, ncpu=12))
-      jldsave("../plots/rho-k-plots/rho-k-$(cancer_categories[cancer])$(misspecification_type[misspec]).jld2"; rhos, ks, losses)
+        nmfargs=(; alg=:greedycd, replicates=16, ncpu=16))
+      jldsave("../plots/rho-k-plots/rho-k-$(cancer_categories[cancer])$(misspecification_type[misspec]).jld2"; rhos, ks, losses, results)
       save("../plots/rho-k-plots/rho-k-$(cancer_categories[cancer])$(misspecification_type[misspec]).svg", fig)
     end
   end
