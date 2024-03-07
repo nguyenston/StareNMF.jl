@@ -69,8 +69,8 @@ function main()
       fig, losses, results = rank_determination(X, ks, rhos; multiplier=500,
         plotargs=(; plot_title="$(cancer_categories[cancer])$(misspecification_type[misspec])"),
         nmfargs=(; alg=:greedycd, replicates=16, ncpu=16))
-      jldsave("../plots/rho-k-plots/rho-k-$(cancer_categories[cancer])$(misspecification_type[misspec]).jld2"; rhos, ks, losses, results)
-      save("../plots/rho-k-plots/rho-k-$(cancer_categories[cancer])$(misspecification_type[misspec]).svg", fig)
+      jldsave("../plots/rho-k-plots-alt/rho-k-$(cancer_categories[cancer])$(misspecification_type[misspec]).jld2"; rhos, ks, losses, results)
+      save("../plots/rho-k-plots-alt/rho-k-$(cancer_categories[cancer])$(misspecification_type[misspec]).svg", fig)
     end
   end
 end
