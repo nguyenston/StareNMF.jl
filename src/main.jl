@@ -12,8 +12,8 @@ using .StareNMF.Utils
 using CairoMakie
 CairoMakie.activate!(type="svg")
 
-function rho_k_losses(losses, rho; krange=1:length(losses), plot_title="", kwargs...)
-  fig = Figure(size=(800, 600))
+function rho_k_losses(losses, rho; krange=1:length(losses), plot_title="", size=(800, 600), kwargs...)
+  fig = Figure(; size)
   ax = Axis(fig[1, 1], yscale=log10, title=plot_title)
   for k in krange
     lines!(ax, rho, losses[k], label="k=$(k)")
@@ -26,9 +26,7 @@ function rank_determination(X, ks, rho; approx_type=StareNMF.KDEUniform, nmfargs
   losses = Array{Vector{Float64}}(undef, length(ks))
   results = Array{NMF.Result}(undef, length(ks))
   for (i, k) in collect(enumerate(ks))
-    print("k=$(k)\t")
     result = threaded_nmf(Float64.(X), k; alg=:multdiv, maxiter=200000, tol=1e-4, nmfargs...)
-    print("computing losses...\t\r")
     losses[i] = StareNMF.structurally_aware_loss(X, result.W, result.H, rho; lambda=0.01, approx_type, kwargs...)
     results[i] = result
   end
