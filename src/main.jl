@@ -3,55 +3,74 @@ include("StareNMF/StareNMF.jl")
 using Distributions
 using LinearAlgebra
 using NMF
+using DataFrames
+using CSV
+using JLD2
 using .StareNMF
 using .StareNMF.Utils
 
-using GLMakie
 using CairoMakie
 CairoMakie.activate!(type="svg")
 
+function rho_k_losses(losses, rho; krange=1:length(losses), plot_title="", kwargs...)
+  fig = Figure(size=(800, 600))
+  ax = Axis(fig[1, 1], yscale=log10, title=plot_title)
+  for k in krange
+    lines!(ax, rho, losses[k], label="k=$(k)")
+  end
+  Legend(fig[1, 2], ax, "Legend")
+  fig
+end
+
+function rank_determination(X, ks, rho; approx_type=StareNMF.KDEUniform, nmfargs=(), plotargs=(), kwargs...)
+  losses = Array{Vector{Float64}}(undef, length(ks))
+  for (i, k) in collect(enumerate(ks))
+    print("k=$(k)\t")
+    result = threaded_nmf(Float64.(X), k; alg=:multdiv, maxiter=200000, tol=1e-4, nmfargs...)
+    print("computing losses...\t\r")
+    losses[i] = StareNMF.structurally_aware_loss(X, result.W, result.H, rho; lambda=0.01, approx_type, kwargs...)
+  end
+  rho_k_losses(losses, rho; plotargs..., krange=ks), losses
+end
+
 function main()
-  K = 5
-  diri = Dirichlet(4K, 0.1)
-  W = rand(diri, K)
-  H = 100 * rand(K, 100)
-  X = count_matrix_from_WH(W, H)
+  signatures_unsorted = CSV.read("../synthetic-data-2023/alexandrov2015_signatures.tsv", DataFrame; delim='\t')
+  signatures = sort(signatures_unsorted)
+  cancer_categories = Dict(
+    "skin" => "107-skin-melanoma-all-seed-1",
+    "ovary" => "113-ovary-adenoca-all-seed-1",
+    "breast" => "214-breast-all-seed-1",
+    "liver" => "326-liver-hcc-all-seed-1",
+    "lung" => "38-lung-adenoca-all-seed-1",
+    "stomach" => "75-stomach-adenoca-all-seed-1")
+  misspecification_type = Dict(
+    "none" => "",
+    "contaminated" => "-contamination-2",
+    "overdispersed" => "-overdispersed-2.0",
+    "perturbed" => "-perturbed-0.0025")
 
-  empirical_eps = generate_empirical_eps_sets(X, W, H, PiecewiseUniform)
-  componentwise_loss = sum(distance_from_standard_uniform.(empirical_eps); dims=1)
-  display(componentwise_loss)
-  println("W = ")
-  display(W)
-  println("Gram matrix of W:")
-  W_l2 = W * Diagonal(1 ./ norm.(eachcol(W)))
-  display(W_l2' * W_l2)
+  println("start looping...")
+  for cancer in keys(cancer_categories)
+    loadings = CSV.read("../synthetic-data-2023/synthetic-$(cancer_categories[cancer])-GT-loadings.csv", DataFrame; header=0)
 
-  rho = collect(0:0.01:1.5)
-  losses_kde = Vector{Float64}[]
-  for k in 1:8
-    result = nnmf(Float64.(X), k; alg=:multdiv, maxiter=30000, replicates=1)
-    push!(losses_kde, structurally_aware_loss(X, result.W, result.H, rho; lambda=0.01, approx_type=KDEUniform))
-  end
+    for misspec in keys(misspecification_type)
+      println("cancer: $(cancer)\tmisspec: $(misspec)")
+      if isfile("../plots/rho-k-plots/rho-k-$(cancer_categories[cancer])$(misspecification_type[misspec]).jld2")
+        continue
+      end
 
-  losses_piecewise = Vector{Float64}[]
-  for k in 1:8
-    result = nnmf(Float64.(X), k; alg=:multdiv, maxiter=30000, replicates=1)
-    push!(losses_piecewise, structurally_aware_loss(X, result.W, result.H, rho; lambda=0.01, approx_type=PiecewiseUniform))
-  end
+      data = CSV.read("../synthetic-data-2023/synthetic-$(cancer_categories[cancer])$(misspecification_type[misspec]).tsv", DataFrame; delim='\t')
+      X = Matrix(data[:, 2:end])
+      rhos = collect(0:0.01:10)
+      ks = 1:nrow(loadings)+3
 
-  fig = Figure(size=(800, 1200))
-  ax1 = Axis(fig[1, 1], yscale=log10, title="K=$(K), D=$(4K), KDE")
-  for k in 1:8
-    lines!(ax1, rho, losses_kde[k], label="k=$(k)")
+      fig, losses = rank_determination(X, ks, rhos; multiplier=500,
+        plotargs=(; plot_title="$(cancer_categories[cancer])$(misspecification_type[misspec])"),
+        nmfargs=(; alg=:greedycd, replicates=12, ncpu=12))
+      jldsave("../plots/rho-k-plots/rho-k-$(cancer_categories[cancer])$(misspecification_type[misspec]).jld2"; rhos, ks, losses)
+      save("../plots/rho-k-plots/rho-k-$(cancer_categories[cancer])$(misspecification_type[misspec]).svg", fig)
+    end
   end
-  ax2 = Axis(fig[2, 1], yscale=log10, title="K=$(K), D=$(4K), Piecewise")
-  for k in 1:8
-    lines!(ax2, rho, losses_piecewise[k], label="k=$(k)")
-  end
-  Legend(fig[1, 2], ax1, "Legend")
-  Legend(fig[2, 2], ax2, "Legend")
-  save("plot.svg", fig)
-  # wait(display(fig))
 end
 
 main()
