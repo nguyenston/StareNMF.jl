@@ -1,8 +1,13 @@
 module Utils
-export invcdf, plot_signature, count_matrix_from_WH
+export invcdf, signature_plot, count_matrix_from_WH
+export threaded_nmf, signature_side2side, signature_bestmatch
 
 using Distributions
 using Makie
+using NMF
+using DataFrames
+using LinearAlgebra
+using Hungarian
 
 """
 The generalized inverse of the cdf of a univariate measure
@@ -15,7 +20,7 @@ end
 """
 use makie to plot a mutation signature
 """
-function plot_signature(gridpos, signatures, sig; title="")
+function signature_plot(gridpos, signatures, sig; title="")
   s = signatures[:, sig]
   subfig = GridLayout()
 
@@ -39,6 +44,99 @@ function plot_signature(gridpos, signatures, sig; title="")
   rowsize!(subfig, 2, Aspect(1, 0.25 / 30))
   rowgap!(subfig, 2)
   gridpos[] = subfig
+end
+
+"""
+NMF.jl package's high level function nnmf, 
+but can specify how many cpus to run in parallel for replicates
+"""
+function threaded_nmf(X, k; replicates=1, ncpu=1, kwargs...)
+  results = Vector{NMF.Result{Float64}}(undef, replicates)
+  c = Channel() do ch
+    foreach(i -> put!(ch, i), 1:replicates)
+  end
+
+  Threads.foreach(c; ntasks=ncpu) do i
+    results[i] = nnmf(X, k; kwargs..., replicates=1)
+  end
+  _, min_idx = findmin(x -> x.objvalue, results)
+  return results[min_idx]
+end
+
+function signature_side2side(gt_loadings::DataFrame, signatures::DataFrame, nmf_results::Vector{NMF.Result{T}};
+  nmf_result_names::Vector{String}=fill("", length(nmf_results))) where {T<:Number}
+
+  # loadings are sorted in order of decreasing importance
+  n_gt_sig = nrow(gt_loadings)
+  sorted_loadings = sort(gt_loadings, rev=true)
+  relevant_signatures = Matrix(signatures[:, sorted_loadings[:, 2]])
+  relsig_normalized_L2 = relevant_signatures * Diagonal(1 ./ norm.(eachcol(relevant_signatures), 2))
+
+  fig = Figure(size=(600 * (length(nmf_results) + 1), 200 * n_gt_sig))
+  for i in 1:n_gt_sig
+    GT_sig = sorted_loadings[i, 2]
+    GT_sig_loading = sorted_loadings[i, 1]
+    Utils.signature_plot(fig[i, 1], signatures, GT_sig; title="$(GT_sig), avg_loading=$(round(GT_sig_loading, digits=2))")
+  end
+  for (r_idx, r) in enumerate(nmf_results)
+    W = r.W
+    H = r.H
+    _, N = size(H)
+
+    W_normalized_L2 = W * Diagonal(1 ./ norm.(eachcol(W), 2))
+    alignment_grid = 1 .- (relsig_normalized_L2' * W_normalized_L2)
+    assignment, _ = hungarian(alignment_grid)
+
+    # Matrix W as a dataframe with each column being a signature
+    W_L1 = norm.(eachcol(W), 1)
+    avg_inferred_loadings = sum(Diagonal(W_L1) * H; dims=2) / N
+    W_dataframe = DataFrame(W * Diagonal(1 ./ W_L1), ["$i" for i in 1:size(W)[2]])
+
+    for (GT_sig_id, inferred_sig) in enumerate(assignment)
+      if inferred_sig != 0
+        diff = alignment_grid[GT_sig_id, inferred_sig]
+        Utils.signature_plot(fig[GT_sig_id, r_idx+1], W_dataframe, "$(inferred_sig)";
+          title="$(nmf_result_names[r_idx]) $(inferred_sig), diff=$(round(diff, digits=2)), avg_loading=$(round(avg_inferred_loadings[inferred_sig], digits=2))")
+      end
+    end
+  end
+  fig
+end
+
+function signature_bestmatch(gt_loadings::DataFrame, signatures::DataFrame, nmf_result::NMF.Result{T};
+  nmf_result_name::String="") where {T<:Number}
+
+  W = nmf_result.W
+  H = nmf_result.H
+  _, N = size(H)
+
+  # Matrix W as a dataframe with each column being a signature
+  W_L1 = norm.(eachcol(W), 1)
+  avg_inferred_loadings = sum(Diagonal(W_L1) * H; dims=2) / N
+  W_dataframe = DataFrame(W * Diagonal(1 ./ W_L1), ["$i" for i in 1:size(W)[2]])
+  n_inferred_sig = ncol(W_dataframe)
+
+  # loadings are sorted in order of decreasing importance
+  sorted_loadings = sort(gt_loadings, rev=true)
+  relevant_signatures = Matrix(signatures[:, sorted_loadings[:, 2]])
+  relsig_normalized_L2 = relevant_signatures * Diagonal(1 ./ norm.(eachcol(relevant_signatures), 2))
+
+  fig = Figure(size=(600 * 2, 200 * n_inferred_sig))
+
+  W_normalized_L2 = W * Diagonal(1 ./ norm.(eachcol(W), 2))
+  alignment_grid = 1 .- (relsig_normalized_L2' * W_normalized_L2)
+  assignment = map(x -> last(x), findmin.(eachcol(alignment_grid)))
+
+
+  for (inferred_sig, GT_sig_id) in enumerate(assignment)
+    diff = alignment_grid[GT_sig_id, inferred_sig]
+    GT_sig = sorted_loadings[GT_sig_id, 2]
+    GT_sig_loading = sorted_loadings[GT_sig_id, 1]
+    Utils.signature_plot(fig[inferred_sig, 1], W_dataframe, "$(inferred_sig)";
+      title="$(nmf_result_name) $(inferred_sig), diff=$(round(diff, digits=2)), avg_loading=$(round(avg_inferred_loadings[inferred_sig], digits=2))")
+    Utils.signature_plot(fig[inferred_sig, 2], signatures, GT_sig; title="$(GT_sig), avg_loading=$(round(GT_sig_loading, digits=2))")
+  end
+  fig
 end
 
 """
