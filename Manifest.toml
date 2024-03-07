@@ -2,7 +2,7 @@
 
 julia_version = "1.10.0"
 manifest_format = "2.0"
-project_hash = "629338bef00132eb936321d33e15a971dd74e377"
+project_hash = "05c84a09fcb21fa80e8ea7376418dee236dc5ded"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -947,6 +947,12 @@ version = "1.10.0"
 git-tree-sha1 = "a3f24677c21f5bbe9d2a714f95dcd58337fb2856"
 uuid = "82899510-4779-5014-852e-03e436cf321d"
 version = "1.0.0"
+
+[[deps.JLD2]]
+deps = ["FileIO", "MacroTools", "Mmap", "OrderedCollections", "Pkg", "PrecompileTools", "Printf", "Reexport", "Requires", "TranscodingStreams", "UUIDs"]
+git-tree-sha1 = "5ea6acdd53a51d897672edb694e3cc2912f3f8a7"
+uuid = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
+version = "0.4.46"
 
 [[deps.JLLWrappers]]
 deps = ["Artifacts", "Preferences"]
