@@ -32,6 +32,7 @@ begin
 	using CairoMakie
 	using CSV
 	using NPZ
+	using JLD2
 end
 
 # ╔═╡ 70b7302e-9598-477e-8709-72308857b2b2
@@ -147,10 +148,16 @@ function threaded_nmf(X, k; replicates=1, ncpu=1, kwargs...)
 end
 
 # ╔═╡ 627eb8be-d921-4059-81af-e5c59b4766e4
+# ╠═╡ disabled = true
+#=╠═╡
 result_none = threaded_nmf(Float64.(X[(cancer, mutation_type)]), 8; alg=:greedycd, maxiter=200000, replicates=10, tol=1e-5, ncpu=8)
+  ╠═╡ =#
 
 # ╔═╡ 4a2cdaa9-ab22-4cc2-9970-f75a1e78463f
+# ╠═╡ disabled = true
+#=╠═╡
 typeof(result_none)
+  ╠═╡ =#
 
 # ╔═╡ da97570d-42d2-4a54-82e4-454306e8b424
 # ╠═╡ disabled = true
@@ -176,7 +183,10 @@ end
   ╠═╡ =#
 
 # ╔═╡ f6698f24-6d09-4501-94af-3c73652e2678
+# ╠═╡ disabled = true
+#=╠═╡
 Axis(Figure())
+  ╠═╡ =#
 
 # ╔═╡ b0416ef3-ffd8-4200-a66c-5a8c1e44ac09
 #=╠═╡
@@ -185,44 +195,49 @@ mvnmf_model.W
 
 # ╔═╡ 6b87776f-11a7-441c-8b5b-7b23ac74ba87
 begin
-	local results = [result_none]
-	local sig_types = ["Inferred Signature", "MuSiCal Signature"]
+	local results, ks = load("../result-cache/rho-k-$(cancer_categories[cancer])$(misspecification_type["none"]).jld2", "results", "ks")
 	# loadings are sorted in order of decreasing importance
 	local sorted_loadings = sort(loadings, rev=true)
 	local relevant_signatures = Matrix(signatures[:, sorted_loadings[:, 2]])
-    local relsig_normalized_L2 = relevant_signatures * Diagonal(1 ./ norm.(eachcol(relevant_signatures), 2))
-	local fig = Figure(size=(600 * (length(results) + 1), 200 * nrow(sorted_loadings)))
+    local relsig_normalized_L2 = relevant_signatures * Diagonal(1 ./ norm.(eachcol(relevant_signatures), 2)) 
+	local n_gt_sig = nrow(loadings)
+	local GT_sig = sorted_loadings[:, 2]
+	local GT_sig_loading = sorted_loadings[:, 1]
+	
+	local fig = Figure(size=(1600, 800))
+	local ax = Axis(fig[1, 1]; limits=((0, n_gt_sig+1), (0, n_gt_sig+1)), yticks=(1:n_gt_sig, GT_sig), xticks=(0.5:n_gt_sig+1, ["GT"; ["K = $(k)" for k in ks[1:n_gt_sig]]]))
 
-	for i in 1:nrow(sorted_loadings)
-		GT_sig = sorted_loadings[i, 2]
-		GT_sig_loading = sorted_loadings[i, 1]
-		Utils.signature_plot(fig[i, 1], signatures, GT_sig; title="$(GT_sig), avg_loading=$(round(GT_sig_loading, digits=2))")
-	end
+	local strokewidth = 1
+	local colormap = :dense
+	local colorrange = (0, 0.3)
+	local radius = x -> 50 * sqrt(x / maximum(GT_sig_loading))
+	local points = Point2f.(0.5, 1:n_gt_sig)
+	local legendradiuses = [1000, 2000, 4000]
+	local markersizes = radius.(legendradiuses)
+	local group_size = [MarkerElement(; marker = :circle, color = :white,
+    	strokewidth, markersize = ms) for ms in markersizes]
 	
+	scatter!(ax, points; markersize=radius.(GT_sig_loading), color=fill(0, n_gt_sig), colorrange, colormap, strokewidth)
+	lines!(ax, [1, 1], [0, n_gt_sig+1]; linewidth=3)
 	
-	for (r_idx, r) in enumerate(results)
+	for (r_idx, r) in enumerate(results[1:n_gt_sig])
 		W = r.W
 		H = r.H
 		K, N = size(H)
 	
 		W_normalized_L2 = W * Diagonal(1 ./ norm.(eachcol(W), 2))
-		alignment_grid = 1 .- (relsig_normalized_L2' * W_normalized_L2)
+		alignment_grid = 1 .- (W_normalized_L2' * relsig_normalized_L2)
 		assignment, total_diff = hungarian(alignment_grid)
 
 		# Matrix W as a dataframe with each column being a signature
 		W_L1 = norm.(eachcol(W), 1)
-		avg_inferred_loadings = sum(Diagonal(W_L1) * H; dims=2) / N
-		W_dataframe = DataFrame(W * Diagonal(1 ./ W_L1), ["$i" for i in 1:size(W)[2]])
-	
-		println("avg diff, $(sig_types[r_idx]) = ", total_diff / K)
-		for (GT_sig_id, inferred_sig) in enumerate(assignment)
-			if inferred_sig != 0
-				diff = alignment_grid[GT_sig_id, inferred_sig]
-				Utils.signature_plot(fig[GT_sig_id, r_idx+1], W_dataframe, "$(inferred_sig)";
-					title="$(sig_types[r_idx]) $(inferred_sig), diff=$(round(diff, digits=2)), avg_loading=$(round(avg_inferred_loadings[inferred_sig], digits=2))")
-			end
-		end
+		avg_inferred_loadings = dropdims(sum(Diagonal(W_L1) * H; dims=2); dims=2) / N
+		points = Point2f.(r_idx + 0.5, assignment)
+		scatter!(ax, points; markersize=radius.(avg_inferred_loadings), color=[alignment_grid[i, assignment[i]] for i in 1:K], colorrange, colormap, strokewidth)
 	end
+
+	Legend(fig[1, 2][1, 1], group_size, string.(legendradiuses), "Mean Loading", tellheight=true, patchsize=(35, 35))
+	Colorbar(fig[1, 2][2, 1]; colormap, colorrange, label="Cosine Error", alignmode=Outside(), halign=:left, size=40)
 	fig
 end
 

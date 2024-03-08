@@ -8,6 +8,7 @@ export UniformApproximate
 export PiecewiseUniform, KDEUniform
 export distance_from_standard_uniform
 export generate_empirical_eps_sets, structurally_aware_loss
+export componentwise_loss, stare_from_component_wise_loss
 
 using Distributions
 using KernelDensity
@@ -98,14 +99,24 @@ function distance_from_standard_uniform(d::KDEUniform)
   return sum(valid_losses)
 end
 
+function componentwise_loss(X::Matrix{I}, W::Matrix{F}, H::Matrix{F};
+  approx_type::Type{T}=KDEUniform, kwargs...) where {T<:UniformApproximate,F<:AbstractFloat,I<:Integer}
+
+  empirical_eps = generate_empirical_eps_sets(X, W, H, approx_type; kwargs...)
+  return dropdims(sum(distance_from_standard_uniform.(empirical_eps); dims=1); dims=1)
+end
+
+function stare_from_component_wise_loss(cwl, rho; lambda=0.01)
+  K = length(cwl)
+  return sum(max.(0, cwl .- rho)) + lambda * K
+end
+
 function structurally_aware_loss(X::Matrix{I}, W::Matrix{F}, H::Matrix{F}, rho::F;
   lambda::F=0.01, approx_type::Type{T}=KDEUniform,
   kwargs...) where {T<:UniformApproximate,F<:AbstractFloat,I<:Integer}
 
-  empirical_eps = generate_empirical_eps_sets(X, W, H, approx_type; kwargs...)
-
-  K = size(W)[2]
-  componentwise_loss = sum(distance_from_standard_uniform.(empirical_eps); dims=1)
+  componentwise_loss = componentwise_loss(X, W, H; approx_type, kwargs)
+  K = length(componentwise_loss)
   return sum(max.(0, componentwise_loss .- rho)) + lambda * K
 end
 
@@ -113,12 +124,11 @@ function structurally_aware_loss(X::Matrix{I}, W::Matrix{F}, H::Matrix{F}, rho::
   lambda::F=0.01, approx_type::Type{T}=KDEUniform,
   kwargs...) where {T<:UniformApproximate,F<:AbstractFloat,I<:Integer}
 
-  empirical_eps = generate_empirical_eps_sets(X, W, H, approx_type; kwargs...)
-
-  K = size(W)[2]
-  componentwise_loss = sum(distance_from_standard_uniform.(empirical_eps); dims=1)
+  componentwise_loss = componentwise_loss(X, W, H; approx_type, kwargs)
+  K = length(componentwise_loss)
   return [sum(max.(0, componentwise_loss .- rh)) + lambda * K for rh in rho]
 end
+
 
 function generate_empirical_eps_sets(X::Matrix{I}, W::Matrix{F}, H::Matrix{F}, approx_type::Type{T};
   kwargs...) where {T<:UniformApproximate,F<:AbstractFloat,I<:Integer}

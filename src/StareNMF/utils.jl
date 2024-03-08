@@ -1,6 +1,7 @@
 module Utils
-export invcdf, signature_plot, count_matrix_from_WH
-export threaded_nmf, signature_side2side, signature_bestmatch
+export invcdf, threaded_nmf, count_matrix_from_WH
+export signature_plot, signature_side2side, signature_bestmatch, bubbles
+export score_by_cosine_difference
 
 using Distributions
 using Makie
@@ -46,6 +47,57 @@ function signature_plot(gridpos, signatures, sig; title="")
   gridpos[] = subfig
 end
 
+function bubbles(gridpos, gt_loadings::DataFrame, gt_signatures::DataFrame, nmf_results::Vector{NMF.Result{T}}) where {T<:Number}
+  subfig = GridLayout()
+
+  sorted_loadings = sort(gt_loadings, rev=true)
+  relevant_signatures = Matrix(gt_signatures[:, sorted_loadings[:, 2]])
+  relsig_normalized_L2 = relevant_signatures * Diagonal(1 ./ norm.(eachcol(relevant_signatures), 2))
+  n_gt_sig = nrow(gt_loadings)
+  GT_sig = sorted_loadings[:, 2]
+  GT_sig_loading = sorted_loadings[:, 1]
+  valid_results = filter(nmf_results) do r
+    size(r.H)[1] <= n_gt_sig
+  end
+
+  fig = Figure(size=(1600, 800))
+  ax = Axis(gridpos; limits=((0, n_gt_sig + 1), (0, n_gt_sig + 1)), yticks=(1:n_gt_sig, GT_sig),
+    xticks=(0.5:n_gt_sig+1, ["GT"; ["K = $(size(r.H)[1])" for r in valid_results]]))
+
+  strokewidth = 1
+  colormap = :dense
+  colorrange = (0, 0.3)
+  radius = x -> 50 * sqrt(x / maximum(GT_sig_loading))
+  points = Point2f.(0.5, 1:n_gt_sig)
+  legendradiuses = [1000, 2000, 4000]
+  markersizes = radius.(legendradiuses)
+  group_size = [MarkerElement(; marker=:circle, color=:white, strokewidth, markersize=ms) for ms in markersizes]
+
+  scatter!(ax, points; markersize=radius.(GT_sig_loading), color=fill(0, n_gt_sig), colorrange, colormap, strokewidth)
+  lines!(ax, [1, 1], [0, n_gt_sig + 1]; linewidth=3)
+
+  for (r_idx, r) in enumerate(valid_results)
+    W = r.W
+    H = r.H
+    K, N = size(H)
+
+    W_normalized_L2 = W * Diagonal(1 ./ norm.(eachcol(W), 2))
+    alignment_grid = 1 .- (W_normalized_L2' * relsig_normalized_L2)
+    assignment, _ = hungarian(alignment_grid)
+
+    # Matrix W as a dataframe with each column being a signature
+    W_L1 = norm.(eachcol(W), 1)
+    avg_inferred_loadings = dropdims(sum(Diagonal(W_L1) * H; dims=2); dims=2) / N
+    points = Point2f.(r_idx + 0.5, assignment)
+    scatter!(ax, points; markersize=radius.(avg_inferred_loadings), color=[alignment_grid[i, assignment[i]] for i in 1:K], colorrange, colormap, strokewidth)
+  end
+
+  subfig[1, 1] = ax
+  subfig[1, 2][1, 1] = Legend(gridpos, group_size, string.(legendradiuses), "Mean Loading"; tellheight=true, patchsize=(35, 35))
+  subfig[1, 2][2, 1] = Colorbar(gridpos; colormap, colorrange, label="Cosine Error", alignmode=Outside(), halign=:left, size=40)
+  gridpos[] = subfig
+end
+
 """
 NMF.jl package's high level function nnmf, 
 but can specify how many cpus to run in parallel for replicates
@@ -63,20 +115,46 @@ function threaded_nmf(X, k; replicates=1, ncpu=1, kwargs...)
   return results[min_idx]
 end
 
-function signature_side2side(gt_loadings::DataFrame, signatures::DataFrame, nmf_results::Vector{NMF.Result{T}};
+"""
+Score the nmf result on how good it's inferrences are. 
+The score is computed by bipartite matching against ground truth 
+  w.r.t. the cosine difference.
+Returns average difference and maximum difference
+"""
+function score_by_cosine_difference(gt_loadings::DataFrame, gt_signatures::DataFrame, nmf_result::NMF.Result{T}) where {T<:Number}
+  # loadings are sorted in order of decreasing importance
+  n_gt_sig = nrow(gt_loadings)
+  sorted_loadings = sort(gt_loadings, rev=true)
+  relevant_signatures = Matrix(gt_signatures[:, sorted_loadings[:, 2]])
+  relsig_normalized_L2 = relevant_signatures * Diagonal(1 ./ norm.(eachcol(relevant_signatures), 2))
+  W = nmf_result.W
+  H = nmf_result.H
+  K, _ = size(H)
+
+  W_normalized_L2 = W * Diagonal(1 ./ norm.(eachcol(W), 2))
+  alignment_grid = 1 .- (W_normalized_L2' * relsig_normalized_L2)
+  assignment, total_score = hungarian(alignment_grid)
+  return total_score / K, maximum([alignment_grid[i, gt] for (i, gt) in enumerate(assignment)])
+end
+
+"""
+Bipartite match inferred results against ground truth signatures
+  w.r.t. the cosine difference. Plot the results side by side
+"""
+function signature_side2side(gt_loadings::DataFrame, gt_signatures::DataFrame, nmf_results::Vector{NMF.Result{T}};
   nmf_result_names::Vector{String}=fill("", length(nmf_results))) where {T<:Number}
 
   # loadings are sorted in order of decreasing importance
   n_gt_sig = nrow(gt_loadings)
   sorted_loadings = sort(gt_loadings, rev=true)
-  relevant_signatures = Matrix(signatures[:, sorted_loadings[:, 2]])
+  relevant_signatures = Matrix(gt_signatures[:, sorted_loadings[:, 2]])
   relsig_normalized_L2 = relevant_signatures * Diagonal(1 ./ norm.(eachcol(relevant_signatures), 2))
 
   fig = Figure(size=(600 * (length(nmf_results) + 1), 200 * n_gt_sig))
   for i in 1:n_gt_sig
     GT_sig = sorted_loadings[i, 2]
     GT_sig_loading = sorted_loadings[i, 1]
-    Utils.signature_plot(fig[i, 1], signatures, GT_sig; title="$(GT_sig), avg_loading=$(round(GT_sig_loading, digits=2))")
+    Utils.signature_plot(fig[i, 1], gt_signatures, GT_sig; title="$(GT_sig), avg_loading=$(round(GT_sig_loading, digits=2))")
   end
   for (r_idx, r) in enumerate(nmf_results)
     W = r.W
@@ -103,7 +181,7 @@ function signature_side2side(gt_loadings::DataFrame, signatures::DataFrame, nmf_
   fig
 end
 
-function signature_bestmatch(gt_loadings::DataFrame, signatures::DataFrame, nmf_result::NMF.Result{T};
+function signature_bestmatch(gt_loadings::DataFrame, gt_signatures::DataFrame, nmf_result::NMF.Result{T};
   nmf_result_name::String="") where {T<:Number}
 
   W = nmf_result.W
@@ -118,7 +196,7 @@ function signature_bestmatch(gt_loadings::DataFrame, signatures::DataFrame, nmf_
 
   # loadings are sorted in order of decreasing importance
   sorted_loadings = sort(gt_loadings, rev=true)
-  relevant_signatures = Matrix(signatures[:, sorted_loadings[:, 2]])
+  relevant_signatures = Matrix(gt_signatures[:, sorted_loadings[:, 2]])
   relsig_normalized_L2 = relevant_signatures * Diagonal(1 ./ norm.(eachcol(relevant_signatures), 2))
 
   fig = Figure(size=(600 * 2, 200 * n_inferred_sig))
@@ -134,10 +212,11 @@ function signature_bestmatch(gt_loadings::DataFrame, signatures::DataFrame, nmf_
     GT_sig_loading = sorted_loadings[GT_sig_id, 1]
     Utils.signature_plot(fig[inferred_sig, 1], W_dataframe, "$(inferred_sig)";
       title="$(nmf_result_name) $(inferred_sig), diff=$(round(diff, digits=2)), avg_loading=$(round(avg_inferred_loadings[inferred_sig], digits=2))")
-    Utils.signature_plot(fig[inferred_sig, 2], signatures, GT_sig; title="$(GT_sig), avg_loading=$(round(GT_sig_loading, digits=2))")
+    Utils.signature_plot(fig[inferred_sig, 2], gt_signatures, GT_sig; title="$(GT_sig), avg_loading=$(round(GT_sig_loading, digits=2))")
   end
   fig
 end
+
 
 """
 TODO: add documentation
