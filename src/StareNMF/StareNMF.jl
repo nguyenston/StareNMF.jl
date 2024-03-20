@@ -8,7 +8,7 @@ export UniformApproximate
 export PiecewiseUniform, KDEUniform
 export distance_from_standard_uniform
 export generate_empirical_eps_sets, structurally_aware_loss
-export componentwise_loss, stare_from_component_wise_loss
+export componentwise_loss, stare_from_componentwise_loss
 
 using Distributions
 using KernelDensity
@@ -24,7 +24,7 @@ struct PiecewiseUniform{T<:AbstractFloat} <: UniformApproximate
   ledge_list::Vector{Tuple{T,T}} # for logging
   components::Vector{Tuple{T,T}} # for logging
 
-  PiecewiseUniform(components::Vector{Tuple{T,T}}; tol::T=1e-4, kwargs...) where {T} = begin
+  PiecewiseUniform(components::Vector{Tuple{T,T}}; tol::T=1e-4) where {T} = begin
     n = length(components)
     ledge_list = []
     for (a, b) in components
@@ -60,7 +60,7 @@ Distribution represented by a kernel density estimation over sample points
 struct KDEUniform{T<:AbstractFloat} <: UniformApproximate
   samples::Vector{T}
   estimated_distr::UnivariateKDE
-  KDEUniform(components::Vector{Tuple{T,T}}; multiplier::Integer=1, kwargs...) where {T} = begin
+  KDEUniform(components::Vector{Tuple{T,T}}; multiplier::Integer=1) where {T} = begin
     samples = T[]
     for (a, b) in components
       @assert 0 <= a <= b <= 1 "invalid component: a = $(a), b = $(b)"
@@ -100,13 +100,13 @@ function distance_from_standard_uniform(d::KDEUniform)
 end
 
 function componentwise_loss(X::Matrix{I}, W::Matrix{F}, H::Matrix{F};
-  approx_type::Type{T}=KDEUniform, kwargs...) where {T<:UniformApproximate,F<:AbstractFloat,I<:Integer}
+  approx_type::Type{T}=KDEUniform, approxargs=()) where {T<:UniformApproximate,F<:AbstractFloat,I<:Integer}
 
-  empirical_eps = generate_empirical_eps_sets(X, W, H, approx_type; kwargs...)
+  empirical_eps = generate_empirical_eps_sets(X, W, H, approx_type; approxargs)
   return dropdims(sum(distance_from_standard_uniform.(empirical_eps); dims=1); dims=1)
 end
 
-function stare_from_component_wise_loss(cwl, rho; lambda=0.01)
+function stare_from_componentwise_loss(cwl, rho; lambda=0.01)
   K = length(cwl)
   return sum(max.(0, cwl .- rho)) + lambda * K
 end
@@ -131,7 +131,7 @@ end
 
 
 function generate_empirical_eps_sets(X::Matrix{I}, W::Matrix{F}, H::Matrix{F}, approx_type::Type{T};
-  kwargs...) where {T<:UniformApproximate,F<:AbstractFloat,I<:Integer}
+  nysamples=1, approxargs=()) where {T<:UniformApproximate,F<:AbstractFloat,I<:Integer}
 
   # sanity checking
   D_X, N_X = size(X)
@@ -148,7 +148,7 @@ function generate_empirical_eps_sets(X::Matrix{I}, W::Matrix{F}, H::Matrix{F}, a
   eps_conditional = reshape([Tuple{Float64,Float64}[] for _ in 1:D*K], (D, K))
 
   y_to_eps_conditional = (y, Wdh) -> (cdf(Poisson(Wdh), y - 1), cdf(Poisson(Wdh), y))
-  for n = 1:N
+  for _ in 1:nysamples, n = 1:N
     x = X[:, n]
     h = H[:, n]
     Wdh = W * Diagonal(h)
@@ -161,7 +161,7 @@ function generate_empirical_eps_sets(X::Matrix{I}, W::Matrix{F}, H::Matrix{F}, a
     y = reduce(hcat, rand.(y_dist)) |> transpose # DxK matrix
     push!.(eps_conditional, y_to_eps_conditional.(y, Wdh))
   end
-  return approx_type.(eps_conditional; kwargs...)
+  return approx_type.(eps_conditional; approxargs...)
 end
 
 end
