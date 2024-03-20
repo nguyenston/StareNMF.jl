@@ -3,5 +3,6 @@ bin/*
 lib/*
 share/*
 plots/*
+druq/*
 pyvenv.cfg
 
