@@ -238,6 +238,7 @@ begin
 
 	Legend(fig[1, 2][1, 1], group_size, string.(legendradiuses), "Mean Loading", tellheight=true, patchsize=(35, 35))
 	Colorbar(fig[1, 2][2, 1]; colormap, colorrange, label="Cosine Error", alignmode=Outside(), halign=:left, size=40)
+	display(fig[1, 2][1, 1])
 	fig
 end
 
@@ -338,6 +339,23 @@ rank_determination(X[(cancer, "overdispersed")], 1:nrow(loadings)+3, collect(0:0
 # ╔═╡ 82eff34d-820d-4f08-aec5-73ba15aac2c9
 # TODO: generate all plots, best match, buuble plots
 
+# ╔═╡ 649162b9-f080-438d-ad98-4b175bd1afe4
+begin
+	local fig = Figure()
+	local gl = GridLayout()
+	local ax = Axis(fig)
+	lines!(ax, 1:2, 1:2, label="loL")
+	gl[1, 1][1, 1] = ax
+	gl[1, 1][1, 2] = Axis(fig)
+	gl[1, 2] = Legend(fig, ax)
+	fig[1, 1] = gl
+	display(fieldnames(typeof(gl)))
+	display(fieldnames(typeof(gl[1, 1])))
+	display(fieldnames(typeof(gl[1, 1].layout)))
+	display(fieldnames(typeof(gl[1, 1].layout.content[1])))
+	gl.content[1].content.content
+end
+
 # ╔═╡ Cell order:
 # ╟─627df66e-cbc7-11ee-0e3e-c770eabc3dde
 # ╠═e30fd15e-ba5d-4c7b-91a1-5238649b8b51
@@ -376,3 +394,4 @@ rank_determination(X[(cancer, "overdispersed")], 1:nrow(loadings)+3, collect(0:0
 # ╠═0d961f8c-5f4c-47e9-92b4-5193c051743b
 # ╠═05e8316a-e797-4142-8211-5c8a5c11d4ca
 # ╠═82eff34d-820d-4f08-aec5-73ba15aac2c9
+# ╠═649162b9-f080-438d-ad98-4b175bd1afe4

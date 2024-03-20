@@ -100,9 +100,9 @@ function distance_from_standard_uniform(d::KDEUniform)
 end
 
 function componentwise_loss(X::Matrix{I}, W::Matrix{F}, H::Matrix{F};
-  approx_type::Type{T}=KDEUniform, approxargs=()) where {T<:UniformApproximate,F<:AbstractFloat,I<:Integer}
+  approx_type::Type{T}=KDEUniform, nysamples::Integer=1, approxargs=()) where {T<:UniformApproximate,F<:AbstractFloat,I<:Integer}
 
-  empirical_eps = generate_empirical_eps_sets(X, W, H, approx_type; approxargs)
+  empirical_eps = generate_empirical_eps_sets(X, W, H, approx_type; nysamples, approxargs)
   return dropdims(sum(distance_from_standard_uniform.(empirical_eps); dims=1); dims=1)
 end
 
@@ -131,7 +131,7 @@ end
 
 
 function generate_empirical_eps_sets(X::Matrix{I}, W::Matrix{F}, H::Matrix{F}, approx_type::Type{T};
-  nysamples=1, approxargs=()) where {T<:UniformApproximate,F<:AbstractFloat,I<:Integer}
+  nysamples::Integer=1, approxargs=()) where {T<:UniformApproximate,F<:AbstractFloat,I<:Integer}
 
   # sanity checking
   D_X, N_X = size(X)

@@ -58,7 +58,7 @@ function cache_result(overwrite=false)
       componentwise_losses = Vector{Vector{Float64}}(undef, length(results))
       Threads.@threads for i in eachindex(results)
         r = results[i]
-        componentwise_losses[i] = componentwise_loss(X, r.W, r.H; approxargs=(; multiplier=500))
+        componentwise_losses[i] = componentwise_loss(X, r.W, r.H; nysamples=10, approxargs=(; multiplier=100))
       end
       jldsave("../result-cache/cache-$(nmf_alg)-$(cancer_categories[cancer])$(misspecification_type[misspec]).jld2"; results, componentwise_losses)
     end
