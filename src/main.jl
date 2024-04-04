@@ -56,7 +56,7 @@ function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200)
       X = Matrix(data[:, 2:end])
 
       results = rank_determination(X, 1:nloadings+3;
-        nmfargs=(; alg=nmf_alg, replicates=16, ncpu=16))
+        nmfargs=(; alg=Symbol(nmf_alg), replicates=16, ncpu=16))
       componentwise_losses = Vector{Vector{Float64}}(undef, length(results))
       Threads.@threads for i in eachindex(results)
         r = results[i]
@@ -96,7 +96,7 @@ function cache_result_real(; overwrite=false, nysamples=20, multiplier=200)
     X = Matrix(data[:, 2:end])
 
     results = rank_determination(X, 1:21;
-      nmfargs=(; alg=nmf_alg, replicates=16, ncpu=16))
+      nmfargs=(; alg=Symbol(nmf_alg), replicates=16, ncpu=16))
     componentwise_losses = Vector{Vector{Float64}}(undef, length(results))
     Threads.@threads for i in eachindex(results)
       r = results[i]
@@ -246,5 +246,5 @@ function generate_plots()
   end
 end
 
-generate_rho_performance_plots()
-generate_plots()
+cache_result_real()
+cache_result_synthetic()
