@@ -2,6 +2,7 @@ module Utils
 export invcdf, threaded_nmf, count_matrix_from_WH
 export signature_plot, signature_side2side, signature_bestmatch, bubbles, rho_k_losses
 export score_by_cosine_difference, rho_k_bottom
+export rho_performance_factory
 
 using Distributions
 using Makie
@@ -46,6 +47,58 @@ function signature_plot(gridpos, signatures, sig; title="")
   rowgap!(subfig, 2)
   gridpos[] = subfig
   return subfig, signature_axis
+end
+
+"""
+TODO: add documentation
+"""
+function rho_performance_factory(gt_loadings::DataFrame, gt_signatures::DataFrame, nmf_results::Vector{NMF.Result{T}}, componentwise_losses;
+  weighting_function=(cd, ld) -> cd + tanh(0.2ld)) where {T<:Number}
+  zero_points = componentwise_losses .|> l -> (length(l), maximum(l))
+  sort!(zero_points; by=last)
+
+  zero_points_filtered = [zero_points[1]]
+  for zp in zero_points[2:end]
+    if zp[1] < zero_points_filtered[end][1]
+      push!(zero_points_filtered, zp)
+    end
+  end
+
+  sorted_loadings = sort(gt_loadings, rev=true)
+  relevant_signatures = Matrix(gt_signatures[:, sorted_loadings[:, 2]])
+  relsig_normalized_L2 = relevant_signatures * Diagonal(1 ./ norm.(eachcol(relevant_signatures), 2))
+  n_gt_sig = nrow(gt_loadings)
+
+  GT_sig_loadings = sorted_loadings[:, 1]
+  valid_results = filter(nmf_results) do r
+    size(r.H)[1] <= n_gt_sig
+  end
+
+  worst_performing_inferrences = Dict()
+  for r in valid_results
+    W = r.W
+    H = r.H
+    K, N = size(H)
+
+    # Matrix W as a dataframe with each column being a signature
+    W_L1 = norm.(eachcol(W), 1)
+    avg_inferred_loadings = dropdims(sum(Diagonal(W_L1) * H; dims=2); dims=2) / N
+
+    W_normalized_L2 = W * Diagonal(1 ./ norm.(eachcol(W), 2))
+    cosine_diffs = 1 .- (W_normalized_L2' * relsig_normalized_L2)
+    loading_diffs = Iterators.product(avg_inferred_loadings, GT_sig_loadings) .|> ((inferred, GT),) -> abs(inferred - GT) / GT
+    combined_diffs = weighting_function.(cosine_diffs, loading_diffs)
+    assignment, _ = hungarian(combined_diffs)
+
+    @assert !haskey(worst_performing_inferrences, K)
+    worst_performing_inferrences[K] = maximum([combined_diffs[r, c] for (r, c) in enumerate(assignment)])
+  end
+  worst_performance_by_K = maximum(values(worst_performing_inferrences))
+  return (rho) -> begin
+    idx = findfirst(x -> x[2] >= rho, zero_points_filtered)
+    K = isnothing(idx) ? zero_points_filtered[end][1] : zero_points_filtered[max(1, idx - 1)][1]
+    return get(worst_performing_inferrences, K, worst_performance_by_K)
+  end
 end
 
 """
@@ -107,7 +160,8 @@ end
 """
 TODO: add documentation
 """
-function bubbles(gridpos, gt_loadings::DataFrame, gt_signatures::DataFrame, nmf_results::Vector{NMF.Result{T}}) where {T<:Number}
+function bubbles(gridpos, gt_loadings::DataFrame, gt_signatures::DataFrame, nmf_results::Vector{NMF.Result{T}};
+  weighting_function=(cd, ld) -> cd + tanh(0.2ld)) where {T<:Number}
   subfig = GridLayout()
 
   sorted_loadings = sort(gt_loadings, rev=true)
@@ -150,7 +204,8 @@ function bubbles(gridpos, gt_loadings::DataFrame, gt_signatures::DataFrame, nmf_
     W_normalized_L2 = W * Diagonal(1 ./ norm.(eachcol(W), 2))
     cosine_diffs = 1 .- (W_normalized_L2' * relsig_normalized_L2)
     loading_diffs = Iterators.product(avg_inferred_loadings, GT_sig_loadings) .|> ((inferred, GT),) -> abs(inferred - GT) / GT
-    assignment, _ = hungarian(cosine_diffs + 0.2tanh.(loading_diffs))
+    combined_diffs = weighting_function.(cosine_diffs, loading_diffs)
+    assignment, _ = hungarian(combined_diffs)
 
     points = Point2f.(r_idx + 0.5, assignment)
     scatter!(ax, points; colorrange, colormap, strokewidth, highclip,
