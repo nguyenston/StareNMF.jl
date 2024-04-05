@@ -96,7 +96,7 @@ function cache_result_real(; overwrite=false, nysamples=20, multiplier=200)
     X = Matrix(data[:, 2:end])
 
     results = rank_determination(X, 1:21;
-      nmfargs=(; alg=Symbol(nmf_alg), replicates=16, ncpu=16))
+      nmfargs=(; alg=Symbol(nmf_alg), replicates=16, ncpu=16, maxiter=400000))
     componentwise_losses = Vector{Vector{Float64}}(undef, length(results))
     Threads.@threads for i in eachindex(results)
       r = results[i]
@@ -106,7 +106,7 @@ function cache_result_real(; overwrite=false, nysamples=20, multiplier=200)
   end
 end
 
-function generate_rho_performance_plots()
+function generate_rho_performance_plots_synthetic()
   println("program start...")
   signatures_unsorted = CSV.read("../synthetic-data-2023/alexandrov2015_signatures.tsv", DataFrame; delim='\t')
   signatures = sort(signatures_unsorted)
@@ -171,7 +171,7 @@ function generate_rho_performance_plots()
   end
 end
 
-function generate_plots()
+function generate_plots_synthetic()
   println("program start...")
   signatures_unsorted = CSV.read("../synthetic-data-2023/alexandrov2015_signatures.tsv", DataFrame; delim='\t')
   signatures = sort(signatures_unsorted)
@@ -194,8 +194,8 @@ function generate_plots()
   for nmf_alg in nmf_algs, cancer in keys(cancer_categories)
     loadings = CSV.read("../synthetic-data-2023/synthetic-$(cancer_categories[cancer])-GT-loadings.csv", DataFrame; header=0)
     nloadings = nrow(loadings)
-    Base.Filesystem.mkpath("../plots/$(cache_name)/composite-$(nmf_alg)/pdf")
-    Base.Filesystem.mkpath("../plots/$(cache_name)/composite-$(nmf_alg)/svg")
+    Base.Filesystem.mkpath("../plots/synthetic/$(cache_name)/composite-$(nmf_alg)/pdf")
+    Base.Filesystem.mkpath("../plots/synthetic/$(cache_name)/composite-$(nmf_alg)/svg")
 
     for misspec in keys(misspecification_type)
       println("alg: $(nmf_alg)\tcancer: $(cancer)\tmisspec: $(misspec)")
@@ -240,11 +240,76 @@ function generate_plots()
 
       fig[0, :] = Label(fig, "$(cancer_categories[cancer])$(misspecification_type[misspec])", fontsize=30)
 
-      save("../plots/$(cache_name)/composite-$(nmf_alg)/pdf/composite-$(nmf_alg)-$(cancer_categories[cancer])$(misspecification_type[misspec]).pdf", fig)
-      save("../plots/$(cache_name)/composite-$(nmf_alg)/svg/composite-$(nmf_alg)-$(cancer_categories[cancer])$(misspecification_type[misspec]).svg", fig)
+      save("../plots/synthetic/$(cache_name)/composite-$(nmf_alg)/pdf/composite-$(nmf_alg)-$(cancer_categories[cancer])$(misspecification_type[misspec]).pdf", fig)
+      save("../plots/synthetic/$(cache_name)/composite-$(nmf_alg)/svg/composite-$(nmf_alg)-$(cancer_categories[cancer])$(misspecification_type[misspec]).svg", fig)
     end
   end
 end
 
-cache_result_real()
-cache_result_synthetic()
+function generate_plots_real()
+  println("program start...")
+  signatures_unsorted = CSV.read("../WGS_PCAWG.96.ready/COSMIC_v3.4_SBS_GRCh38.tsv", DataFrame; delim='\t')
+  signatures = sort(signatures_unsorted)
+  cancer_categories = Dict(
+    "skin" => "Skin-Melanoma",
+    "ovary" => "Ovary-AdenoCA",
+    "breast" => "Breast",
+    "liver" => "Liver-HCC",
+    "lung" => "Lung-SCC",
+    "stomach" => "Stomach-AdenoCA")
+  cache_name = "nys=20-multiplier=200"
+  nmf_algs = ["multdiv", "greedycd"]
+
+  sig_names = names(signatures)[3:end]
+  loadings = DataFrame(loadings=fill(2000, length(sig_names)), signatures=sig_names)
+  nloadings = nrow(loadings)
+
+  println("start looping...")
+  for nmf_alg in nmf_algs, cancer in keys(cancer_categories)
+    Base.Filesystem.mkpath("../plots/real/$(cache_name)/composite-$(nmf_alg)/pdf")
+    Base.Filesystem.mkpath("../plots/real/$(cache_name)/composite-$(nmf_alg)/svg")
+
+    println("alg: $(nmf_alg)\tcancer: $(cancer)")
+    # jldsave("../result-cache/rho-k-$(cancer_categories[cancer])$(misspecification_type[misspec]).jld2"; rhos, ks, losses, results)
+    # data = CSV.read("../synthetic-data-2023/synthetic-$(cancer_categories[cancer])$(misspecification_type[misspec]).tsv", DataFrame; delim='\t')
+    # X = Matrix(data[:, 2:end])
+
+    file = load("../result-cache-real/$(cache_name)/cache-real-$(nmf_alg)-$(cancer_categories[cancer]).jld2")
+    results = [r for r in file["results"]]
+    componentwise_losses = file["componentwise_losses"]
+
+    valid_results = filter(results) do r
+      size(r.H)[1] <= nloadings
+    end
+    fig = Figure(size=(3200, 3200))
+    rhos = 0:0.01:40
+
+    rho_k_losses(fig[1, 2][1, 1], componentwise_losses, rhos)
+    rho_k_bottom(fig[1, 2][2, 1], componentwise_losses)
+    subfig_bubs, ax_bubs = bubbles(fig[1, 1], loadings, signatures, valid_results; weighting_function=(cd, ld) -> cd)
+    bubs_legend_and_colorbar = GridLayout()
+    bubs_legend_and_colorbar[1:2, 1] = subfig_bubs.content[2].content.content .|> x -> x.content
+
+
+    ax2 = Axis(fig; yscale=identity, xticks=(1.5:length(valid_results)+0.5, ["K = $(i)" for i in 1:length(valid_results)]))
+
+    mrl_maxes = score_by_cosine_difference.([loadings], [signatures], valid_results)
+    lines!(ax2, 1.5:length(valid_results)+0.5, [mm[2] for mm in mrl_maxes]; label="max difference", color=:orange)
+    linkxaxes!(ax_bubs, ax2)
+    subfig_bubs[1, 1] = ax2
+    subfig_bubs[2, 1] = ax_bubs
+
+
+    subfig_bubs[1, 2] = Legend(fig, ax2)
+    subfig_bubs[2, 2] = bubs_legend_and_colorbar
+
+    rowsize!(subfig_bubs, 2, Relative(7 // 8))
+
+    fig[0, :] = Label(fig, "$(cancer_categories[cancer])", fontsize=30)
+
+    save("../plots/real/$(cache_name)/composite-$(nmf_alg)/pdf/composite-$(nmf_alg)-$(cancer_categories[cancer]).pdf", fig)
+    save("../plots/real/$(cache_name)/composite-$(nmf_alg)/svg/composite-$(nmf_alg)-$(cancer_categories[cancer]).svg", fig)
+  end
+end
+
+generate_plots_real()
