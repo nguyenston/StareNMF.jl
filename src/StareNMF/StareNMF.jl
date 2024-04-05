@@ -60,7 +60,7 @@ Distribution represented by a kernel density estimation over sample points
 struct KDEUniform{T<:AbstractFloat} <: UniformApproximate
   samples::Vector{T}
   estimated_distr::UnivariateKDE
-  KDEUniform(components::Vector{Tuple{T,T}}; multiplier::Integer=1) where {T} = begin
+  KDEUniform(components::Vector{Tuple{T,T}}; multiplier::Integer=1, save_sample=false) where {T} = begin
     samples = T[]
     for (a, b) in components
       @assert 0 <= a <= b <= 1 "invalid component: a = $(a), b = $(b)"
@@ -70,7 +70,7 @@ struct KDEUniform{T<:AbstractFloat} <: UniformApproximate
         append!(samples, fill(a, multiplier))
       end
     end
-    return new{T}(samples, kde(samples, boundary=(0, 1), kernel=Epanechnikov))
+    return new{T}(save_sample ? samples : T[], kde(samples, boundary=(0, 1), kernel=Epanechnikov))
   end
 end
 
