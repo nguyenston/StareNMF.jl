@@ -176,15 +176,18 @@ function bubbles(gridpos, gt_loadings::DataFrame, gt_signatures::DataFrame, nmf_
   end
 
   ax = Axis(gridpos; limits=((0, n_gt_sig + 1), (0, n_gt_sig + 1)), yticks=(1:n_gt_sig, GT_sig),
-    xticks=(0.5:n_gt_sig+1, ["GT"; ["K = $(size(r.H)[1])" for r in valid_results]]))
+    xticks=(0.5:length(valid_results)+1, ["GT"; ["K = $(size(r.H)[1])" for r in valid_results]]))
+
+  max_inferred_loading = maximum([maximum(sum(Diagonal(norm.(eachcol(r.W), 1)) * r.H; dims=2)) / size(r.H)[2] for r in valid_results])
+  max_radius = round(max(maximum(GT_sig_loadings), max_inferred_loading); sigdigits=2)
 
   strokewidth = 1
   colormap = :Blues_5
   highclip = :black
   colorrange = (0, 0.3)
-  radius = x -> 50 * sqrt(x / maximum(GT_sig_loadings))
+  radius = x -> 50 * sqrt(x / max_radius)
   points = Point2f.(0.5, 1:n_gt_sig)
-  legendradiuses = [1000, 2000, 4000]
+  legendradiuses = [round(max_radius / 4; sigdigits=2), round(max_radius / 2; sigdigits=2), max_radius]
   markersizes = radius.(legendradiuses)
   group_size = [MarkerElement(; marker=:circle, color=:white, strokewidth, markersize=ms) for ms in markersizes]
 
@@ -198,8 +201,8 @@ function bubbles(gridpos, gt_loadings::DataFrame, gt_signatures::DataFrame, nmf_
     K, N = size(H)
 
     # Matrix W as a dataframe with each column being a signature
-    W_L1 = norm.(eachcol(W), 1)
-    avg_inferred_loadings = dropdims(sum(Diagonal(W_L1) * H; dims=2); dims=2) / N
+    W_L1 = Diagonal(norm.(eachcol(W), 1))
+    avg_inferred_loadings = dropdims(sum(W_L1 * H; dims=2); dims=2) / N
 
     W_normalized_L2 = W * Diagonal(1 ./ norm.(eachcol(W), 2))
     cosine_diffs = 1 .- (W_normalized_L2' * relsig_normalized_L2)
