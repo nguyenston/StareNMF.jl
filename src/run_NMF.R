@@ -77,7 +77,7 @@ for (file in files) {
   # perform signature discovery several times with diff k values
   for (k in k_min:k_max) {
     file_name <- paste(tumor_type, k, sep = "")
-    result <- discover_signatures(musica, "SBS96", k, "nmf")
+    result <- discover_signatures(musica, "SBS96", k, "nmf", par_cores = 16)
     write.csv(signatures(result), paste(file_name, "-W.csv", sep = ""))
     write.csv(signatures(result), paste(file_name, "-H.csv", sep = ""))
   }
