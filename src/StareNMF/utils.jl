@@ -187,7 +187,7 @@ function bubbles(gridpos, gt_loadings::DataFrame, gt_signatures::DataFrame, nmf_
   colorrange = (0, 0.3)
   radius = x -> 50 * sqrt(x / max_radius)
   points = Point2f.(0.5, 1:n_gt_sig)
-  legendradiuses = [round(max_radius / 4; sigdigits=2), round(max_radius / 2; sigdigits=2), max_radius]
+  legendradiuses = [round(max_radius / 4; sigdigits=2), round(max_radius / 2; sigdigits=2), max_radius] .|> Int
   markersizes = radius.(legendradiuses)
   group_size = [MarkerElement(; marker=:circle, color=:white, strokewidth, markersize=ms) for ms in markersizes]
 
