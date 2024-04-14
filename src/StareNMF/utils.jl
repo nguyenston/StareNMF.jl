@@ -249,7 +249,8 @@ The score is computed by bipartite matching against ground truth
   w.r.t. the cosine difference.
 Returns max relative mean loading difference and maximum difference
 """
-function score_by_cosine_difference(gt_loadings::DataFrame, gt_signatures::DataFrame, nmf_result::NMF.Result{T}) where {T<:Number}
+function score_by_cosine_difference(gt_loadings::DataFrame, gt_signatures::DataFrame, nmf_result::NMF.Result{T};
+  weighting_function=(cd, ld) -> cd + tanh(0.2ld)) where {T<:Number}
   # loadings are sorted in order of decreasing importance
   sorted_loadings = sort(gt_loadings, rev=true)
   GT_sig_loadings = sorted_loadings[:, 1]
@@ -266,7 +267,8 @@ function score_by_cosine_difference(gt_loadings::DataFrame, gt_signatures::DataF
   W_normalized_L2 = W * Diagonal(1 ./ norm.(eachcol(W), 2))
   cosine_diffs = 1 .- (W_normalized_L2' * relsig_normalized_L2)
   loading_diffs = Iterators.product(avg_inferred_loadings, GT_sig_loadings) .|> ((inferred, GT),) -> abs(inferred - GT) / GT
-  assignment, _ = hungarian(cosine_diffs + 0.2tanh.(loading_diffs))
+  combined_diffs = weighting_function.(cosine_diffs, loading_diffs)
+  assignment, _ = hungarian(combined_diffs)
 
   return (maximum([loading_diffs[i, gt] for (i, gt) in enumerate(assignment)]),
     maximum([cosine_diffs[i, gt] for (i, gt) in enumerate(assignment)]))
