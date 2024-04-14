@@ -131,7 +131,7 @@ function generate_rho_performance_plots_synthetic()
     ax = Axis(fig[1, 1])
     rhos = collect(0:0.1:60)
     avg_performance = zeros(length(rhos))
-    Base.Filesystem.mkpath("../plots/$(cache_name)/rho-performances-$(nmf_alg)/")
+    Base.Filesystem.mkpath("../plots/synthetic/$(cache_name)/rho-performances-$(nmf_alg)/")
     for cancer in keys(cancer_categories)
       local_fig = Figure(size=(1500, 1000))
       local_ax = Axis(local_fig[1, 1])
@@ -161,13 +161,13 @@ function generate_rho_performance_plots_synthetic()
       lines!(local_ax, rhos, local_avg_performance / 4; label="Average", color=:black, linewidth=2)
       local_fig[1, 2] = Legend(local_fig, local_ax, "Legend")
       Label(local_fig[0, :], "Rho performances - $(cancer)", fontsize=25)
-      save("../plots/$(cache_name)/rho-performances-$(nmf_alg)/rho-performances-$(nmf_alg)-$(cancer).svg", local_fig)
+      save("../plots/synthetic/$(cache_name)/rho-performances-$(nmf_alg)/rho-performances-$(nmf_alg)-$(cancer).svg", local_fig)
     end
     lines!(ax, rhos, avg_performance / 24; label="Average", color=:black, linewidth=2)
     fig[1, 2] = Legend(fig, ax, "Legend")
     Label(fig[0, :], "Rho performances", fontsize=25)
-    save("../plots/$(cache_name)/rho-performances-$(nmf_alg)/rho-performances-$(nmf_alg).svg", fig)
-    save("../plots/$(cache_name)/rho-performances-$(nmf_alg)/rho-performances-$(nmf_alg).pdf", fig)
+    save("../plots/synthetic/$(cache_name)/rho-performances-$(nmf_alg)/rho-performances-$(nmf_alg).svg", fig)
+    save("../plots/synthetic/$(cache_name)/rho-performances-$(nmf_alg)/rho-performances-$(nmf_alg).pdf", fig)
   end
 end
 
@@ -221,9 +221,10 @@ function generate_plots_synthetic()
 
 
       ax1 = Axis(fig; yscale=log10, xticks=(1.5:length(valid_results)+0.5, ["K = $(i)" for i in 1:length(valid_results)]))
-      ax2 = Axis(fig; yscale=identity, xticks=(1.5:length(valid_results)+0.5, ["K = $(i)" for i in 1:length(valid_results)]))
+      ax2 = Axis(fig; yscale=identity, limits=(nothing, (0, nothing)),
+        xticks=(1.5:length(valid_results)+0.5, ["K = $(i)" for i in 1:length(valid_results)]))
 
-      mrl_maxes = score_by_cosine_difference.([loadings], [signatures], valid_results)
+      mrl_maxes = score_by_cosine_difference.([loadings], [signatures], valid_results; weighting_function=(cd, ld) -> cd + tanh(0.1ld))
       lines!(ax1, 1.5:length(valid_results)+0.5, [mm[1] for mm in mrl_maxes]; label="max relative loading difference")
       lines!(ax2, 1.5:length(valid_results)+0.5, [mm[2] for mm in mrl_maxes]; label="max difference", color=:orange)
       linkxaxes!(ax_bubs, ax1, ax2)
@@ -276,6 +277,7 @@ function generate_plots_real()
 
     file = load("../result-cache-real/$(cache_name)/cache-real-$(nmf_alg)-$(cancer_categories[cancer]).jld2")
     results = [r for r in file["results"]]
+    println([r.converged for r in results])
     componentwise_losses = file["componentwise_losses"]
 
     valid_results = filter(results) do r
@@ -286,14 +288,15 @@ function generate_plots_real()
 
     rho_k_losses(fig[1, 2][1, 1], componentwise_losses, rhos)
     rho_k_bottom(fig[1, 2][2, 1], componentwise_losses)
-    subfig_bubs, ax_bubs = bubbles(fig[1, 1], loadings, signatures, valid_results; weighting_function=(cd, ld) -> cd)
+    subfig_bubs, ax_bubs = bubbles(fig[1, 1], loadings, signatures, valid_results; weighting_function=(cd, _) -> cd)
     bubs_legend_and_colorbar = GridLayout()
     bubs_legend_and_colorbar[1:2, 1] = subfig_bubs.content[2].content.content .|> x -> x.content
 
 
-    ax2 = Axis(fig; yscale=identity, xticks=(1.5:length(valid_results)+0.5, ["K = $(i)" for i in 1:length(valid_results)]))
+    ax2 = Axis(fig; yscale=identity, limits=(nothing, (0, nothing)),
+      xticks=(1.5:length(valid_results)+0.5, ["K = $(i)" for i in 1:length(valid_results)]))
 
-    mrl_maxes = score_by_cosine_difference.([loadings], [signatures], valid_results)
+    mrl_maxes = score_by_cosine_difference.([loadings], [signatures], valid_results; weighting_function=(cd, _) -> cd)
     lines!(ax2, 1.5:length(valid_results)+0.5, [mm[2] for mm in mrl_maxes]; label="max difference", color=:orange)
     linkxaxes!(ax_bubs, ax2)
     subfig_bubs[1, 1] = ax2
@@ -313,3 +316,5 @@ function generate_plots_real()
 end
 
 generate_plots_real()
+# generate_plots_synthetic()
+# generate_rho_performance_plots_synthetic()
