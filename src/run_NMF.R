@@ -1,3 +1,4 @@
+setwd("../WGS_PCAWG.96.ready/")
 library(musicatk)
 library(readr)
 
@@ -6,8 +7,8 @@ files <- c(
   "Breast.tsv", "Liver-HCC.tsv", "Lung-SCC.tsv", "Ovary-AdenoCA.tsv",
   "Skin-Melanoma.tsv", "Stomach-AdenoCA.tsv"
 )
-k_min <- 5
-k_max <- 5
+k_min <- 1
+k_max <- 21
 
 # override current musicatk function for creating
 #   a musica object to work with only a count table
@@ -79,6 +80,6 @@ for (file in files) {
     file_name <- paste(tumor_type, k, sep = "")
     result <- discover_signatures(musica, "SBS96", k, "nmf", par_cores = 16)
     write.csv(signatures(result), paste(file_name, "-W.csv", sep = ""))
-    write.csv(signatures(result), paste(file_name, "-H.csv", sep = ""))
+    write.csv(exposures(result), paste(file_name, "-H.csv", sep = ""))
   }
 }
