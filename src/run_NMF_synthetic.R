@@ -1,4 +1,4 @@
-setwd("../WGS_PCAWG.96.ready/")
+setwd("../synthetic-data-2023/")
 library(musicatk)
 library(readr)
 
