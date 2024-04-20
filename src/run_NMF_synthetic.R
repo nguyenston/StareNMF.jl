@@ -181,8 +181,8 @@ create_musica <- function(count_table) {
 for (cancer in names(cancer_categories)) {
   for (misspec in names(misspecification_type)) {
     file <- paste(
-      "synthetic-", cancer_categories$cancer,
-      misspecification_type$misspec, ".tsv",
+      "synthetic-", cancer_categories[[cancer]],
+      misspecification_type[[misspec]], ".tsv",
       sep = ""
     )
     # get tumor type
@@ -208,7 +208,8 @@ for (cancer in names(cancer_categories)) {
         sep = ""
       ))
       write.csv(exposures(result), paste(
-        "../raw-cache-R/synthetic/nmf/", "-H.csv",
+        "../raw-cache-R/synthetic/nmf/",
+        file_name, "-H.csv",
         sep = ""
       ))
     }

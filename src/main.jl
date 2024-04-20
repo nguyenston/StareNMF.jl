@@ -94,8 +94,8 @@ function cache_result_real(; overwrite=false, nysamples=20, multiplier=200, r_mo
     X = Matrix(data[:, 2:end])
 
     if r_mode
-      Ws = [CSV.read("../raw-cache-R/$(nmf_alg)/$(cancer_categories[cancer])$(k)-W.csv", DataFrame)[:, 2:end] for k in ks] .|> Matrix
-      Hs = [CSV.read("../raw-cache-R/$(nmf_alg)/$(cancer_categories[cancer])$(k)-H.csv", DataFrame)[:, 2:end] for k in ks] .|> Matrix{Float64}
+      Ws = [CSV.read("../raw-cache-R/real/$(nmf_alg)/$(cancer_categories[cancer])$(k)-W.csv", DataFrame)[:, 2:end] for k in ks] .|> Matrix
+      Hs = [CSV.read("../raw-cache-R/real/$(nmf_alg)/$(cancer_categories[cancer])$(k)-H.csv", DataFrame)[:, 2:end] for k in ks] .|> Matrix{Float64}
       results = NMF.Result{Float64}.(Ws, Hs, 0, true, 0)
     else
       results = rank_determination(X, ks;
