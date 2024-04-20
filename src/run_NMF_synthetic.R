@@ -69,7 +69,7 @@ discover_signatures <- function(musica, table_name, num_signatures,
     # Needed to prevent error with entirely zero rows
     epsilon <- 0.00000001
 
-    decomp <- NMF::nmf(counts_table + epsilon, num_signatures, "nsNMF",
+    decomp <- NMF::nmf(counts_table + epsilon, num_signatures, "brunet",
       seed = seed,
       nrun = nstart, .options = paste("p", par_cores,
         sep = ""
@@ -110,9 +110,19 @@ discover_signatures <- function(musica, table_name, num_signatures,
   return(result)
 }
 
-files <- c(
-  "Breast.tsv", "Liver-HCC.tsv", "Lung-SCC.tsv", "Ovary-AdenoCA.tsv",
-  "Skin-Melanoma.tsv", "Stomach-AdenoCA.tsv"
+cancer_categories <- list(
+  skin = "107-skin-melanoma-all-seed-1",
+  ovary = "113-ovary-adenoca-all-seed-1",
+  breast = "214-breast-all-seed-1",
+  liver = "326-liver-hcc-all-seed-1",
+  lung = "38-lung-adenoca-all-seed-1",
+  stomach = "75-stomach-adenoca-all-seed-1"
+)
+misspecification_type <- list(
+  none = "",
+  contaminated = "-contamination-2",
+  overdispersed = "-overdispersed-2.0",
+  perturbed = "-perturbed-0.0025"
 )
 k_min <- 1
 k_max <- 21
@@ -168,25 +178,39 @@ create_musica <- function(count_table) {
 }
 
 # loop through each dataset
-for (file in files) {
-  # get tumor type
-  tumor_type <- substr(file, 1, nchar(file) - 4)
+for (cancer in names(cancer_categories)) {
+  for (misspec in names(misspecification_type)) {
+    file <- paste(
+      "synthetic-", cancer_categories$cancer,
+      misspecification_type$misspec, ".tsv",
+      sep = ""
+    )
+    # get tumor type
+    tumor_type <- cancer
 
-  # read in count table
-  count_table <- as.data.frame(read_tsv(file))
-  # remove column of mutation types
-  count_table <- count_table[, c(-1)]
-  # specify rownames as the mutation types (use format used by cosmic)
-  rownames(count_table) <- rownames(signatures(cosmic_v3_sbs_sigs))
+    # read in count table
+    count_table <- as.data.frame(read_tsv(file))
+    # remove column of mutation types
+    count_table <- count_table[, c(-1)]
+    # specify rownames as the mutation types (use format used by cosmic)
+    rownames(count_table) <- rownames(signatures(cosmic_v3_sbs_sigs))
 
-  # create musica object with mutation counts
-  musica <- create_musica(count_table)
+    # create musica object with mutation counts
+    musica <- create_musica(count_table)
 
-  # perform signature discovery several times with diff k values
-  for (k in k_min:k_max) {
-    file_name <- paste(tumor_type, k, sep = "")
-    result <- discover_signatures(musica, "SBS96", k, "nmf")
-    write.csv(signatures(result), paste(file_name, "-W.csv", sep = ""))
-    write.csv(exposures(result), paste(file_name, "-H.csv", sep = ""))
+    # perform signature discovery several times with diff k values
+    for (k in k_min:k_max) {
+      file_name <- paste(cancer, "-", misspec, k, sep = "")
+      result <- discover_signatures(musica, "SBS96", k, "nmf")
+      write.csv(signatures(result), paste(
+        "../raw-cache-R/synthetic/nmf/",
+        file_name, "-W.csv",
+        sep = ""
+      ))
+      write.csv(exposures(result), paste(
+        "../raw-cache-R/synthetic/nmf/", "-H.csv",
+        sep = ""
+      ))
+    }
   }
 }

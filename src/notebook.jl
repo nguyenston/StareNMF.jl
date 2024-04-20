@@ -70,6 +70,17 @@ signatures_unsorted = CSV.read("../synthetic-data-2023/alexandrov2015_signatures
 # ╔═╡ c493008d-df0f-4869-bbf8-d0cfe215ad48
 signatures = sort(CSV.read("../synthetic-data-2023/alexandrov2015_signatures.tsv", DataFrame; delim='\t'))
 
+# ╔═╡ 492cf403-e689-4642-b5db-379d182b9d92
+begin
+	real_signatures = sort(CSV.read("../WGS_PCAWG.96.ready/COSMIC_v3.4_SBS_GRCh38.tsv", DataFrame; delim='\t'))
+	local sig_names = names(real_signatures)[3:end]
+	local loadings = DataFrame(loadings=fill(2000, length(sig_names)), signatures=sig_names)
+	real_signatures
+end
+
+# ╔═╡ 9396d475-c2b7-4a88-b1d1-d6dd7ffc7981
+length(names(real_signatures))
+
 # ╔═╡ df32599c-d8d3-4166-ada4-b7e709a849fa
 begin
 	cancer_categories = Dict(
@@ -126,6 +137,15 @@ begin
 		X[key] = Matrix(data[key][:, 2:end])
 	end
 end
+
+# ╔═╡ 9bdb281b-0161-4c55-84c4-bf4593b78b1c
+Matrix(CSV.read("../WGS_PCAWG.96.ready/Breast.tsv", DataFrame; delim='\t')[:, 2:end])
+
+# ╔═╡ efdf81f3-cc4c-4b9b-93d7-00825a7a1429
+Symbol("multdiv")
+
+# ╔═╡ 2d31c27f-8e9f-4b0c-8f16-1030245434cd
+data[("skin", "none")][:, 1:end]
 
 # ╔═╡ 172d00f7-42f3-419c-bc6a-e87d9691f691
 all_loadings = npzread("../synthetic-data-2023/synthetic-113-ovary-adenoca-all-loadings.npy")
@@ -356,6 +376,9 @@ begin
 	gl.content[1].content.content
 end
 
+# ╔═╡ cf6a3dce-ce23-42d4-b4f1-1b6a2b3db332
+round(Int, 1234312.328104)
+
 # ╔═╡ Cell order:
 # ╟─627df66e-cbc7-11ee-0e3e-c770eabc3dde
 # ╠═e30fd15e-ba5d-4c7b-91a1-5238649b8b51
@@ -368,6 +391,8 @@ end
 # ╠═02db4599-b3d2-4913-bbc1-4324f8650b00
 # ╠═c46c00c8-0e6c-4ea8-bb7a-6b54a29bd535
 # ╠═c493008d-df0f-4869-bbf8-d0cfe215ad48
+# ╠═492cf403-e689-4642-b5db-379d182b9d92
+# ╠═9396d475-c2b7-4a88-b1d1-d6dd7ffc7981
 # ╠═df32599c-d8d3-4166-ada4-b7e709a849fa
 # ╠═ab330ce4-03ea-418a-87ff-dd1445104747
 # ╠═b8bda4a6-639f-4dff-89b8-6473cec3fe3f
@@ -375,6 +400,9 @@ end
 # ╠═bccd413c-5345-4df3-a24f-8c8be663035a
 # ╠═9f02167e-1992-48e6-a2c0-fe48157fbd56
 # ╠═eeebeb94-0d36-4043-8bec-868c9d19725c
+# ╠═9bdb281b-0161-4c55-84c4-bf4593b78b1c
+# ╠═efdf81f3-cc4c-4b9b-93d7-00825a7a1429
+# ╠═2d31c27f-8e9f-4b0c-8f16-1030245434cd
 # ╠═172d00f7-42f3-419c-bc6a-e87d9691f691
 # ╠═93d11fb4-cd84-4eb7-bf98-de0839f51991
 # ╠═620eb068-f906-4b3b-b374-55f50a587b6c
@@ -395,3 +423,4 @@ end
 # ╠═05e8316a-e797-4142-8211-5c8a5c11d4ca
 # ╠═82eff34d-820d-4f08-aec5-73ba15aac2c9
 # ╠═649162b9-f080-438d-ad98-4b175bd1afe4
+# ╠═cf6a3dce-ce23-42d4-b4f1-1b6a2b3db332

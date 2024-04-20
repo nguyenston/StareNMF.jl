@@ -67,10 +67,8 @@ function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200)
   end
 end
 
-function cache_result_real(; overwrite=false, nysamples=20, multiplier=200)
+function cache_result_real(; overwrite=false, nysamples=20, multiplier=200, r_mode=false, ks=1:21)
   println("program start...")
-  signatures_unsorted = CSV.read("../synthetic-data-2023/alexandrov2015_signatures.tsv", DataFrame; delim='\t')
-  signatures = sort(signatures_unsorted)
   cancer_categories = Dict(
     "skin" => "Skin-Melanoma",
     "ovary" => "Ovary-AdenoCA",
@@ -78,25 +76,33 @@ function cache_result_real(; overwrite=false, nysamples=20, multiplier=200)
     "liver" => "Liver-HCC",
     "lung" => "Lung-SCC",
     "stomach" => "Stomach-AdenoCA")
-  cache_name = "nys=$(nysamples)-multiplier=$(multiplier)"
-  nmf_algs = ["multdiv", "greedycd"]
+  cache_name = r_mode ? "musicatk-nys=$(nysamples)-multiplier=$(multiplier)" : "nys=$(nysamples)-multiplier=$(multiplier)"
+  nmf_algs = r_mode ? ["nsnmf"] : ["multdiv", "greedycd"]
 
   println("start looping...")
   Base.Filesystem.mkpath("../result-cache-real/$(cache_name)/")
   for nmf_alg in nmf_algs, cancer in keys(cancer_categories)
-    # loadings = CSV.read("../synthetic-data-2023/synthetic-$(cancer_categories[cancer])-GT-loadings.csv", DataFrame; header=0)
-    # nloadings = nrow(loadings)
 
     println("alg: $(nmf_alg)\tcancer: $(cancer)\t")
+    # skip if cache already exists
     if isfile("../result-cache-real/$(cache_name)/cache-real-$(nmf_alg)-$(cancer_categories[cancer]).jld2") && !overwrite
       continue
     end
 
+    # compute NMF results
     data = CSV.read("../WGS_PCAWG.96.ready/$(cancer_categories[cancer]).tsv", DataFrame; delim='\t')
     X = Matrix(data[:, 2:end])
 
-    results = rank_determination(X, 1:21;
-      nmfargs=(; alg=Symbol(nmf_alg), replicates=16, ncpu=16, maxiter=400000))
+    if r_mode
+      Ws = [CSV.read("../raw-cache-R/$(nmf_alg)/$(cancer_categories[cancer])$(k)-W.csv", DataFrame)[:, 2:end] for k in ks] .|> Matrix
+      Hs = [CSV.read("../raw-cache-R/$(nmf_alg)/$(cancer_categories[cancer])$(k)-H.csv", DataFrame)[:, 2:end] for k in ks] .|> Matrix{Float64}
+      results = NMF.Result{Float64}.(Ws, Hs, 0, true, 0)
+    else
+      results = rank_determination(X, ks;
+        nmfargs=(; alg=Symbol(nmf_alg), replicates=16, ncpu=16, maxiter=400000))
+    end
+
+    # compute componentwise losses
     componentwise_losses = Vector{Vector{Float64}}(undef, length(results))
     Threads.@threads for i in eachindex(results)
       r = results[i]
@@ -247,7 +253,7 @@ function generate_plots_synthetic()
   end
 end
 
-function generate_plots_real()
+function generate_plots_real(; cache_name="nys=20-multiplier=200", nmf_algs=["multdiv", "greedycd"])
   println("program start...")
   signatures_unsorted = CSV.read("../WGS_PCAWG.96.ready/COSMIC_v3.4_SBS_GRCh38.tsv", DataFrame; delim='\t')
   signatures = sort(signatures_unsorted)
@@ -258,8 +264,6 @@ function generate_plots_real()
     "liver" => "Liver-HCC",
     "lung" => "Lung-SCC",
     "stomach" => "Stomach-AdenoCA")
-  cache_name = "nys=20-multiplier=200"
-  nmf_algs = ["multdiv", "greedycd"]
 
   sig_names = names(signatures)[3:end]
   loadings = DataFrame(loadings=fill(2000, length(sig_names)), signatures=sig_names)
@@ -315,6 +319,7 @@ function generate_plots_real()
   end
 end
 
-generate_plots_real()
+# cache_result_real(; r_mode=true, ks=1:21)
+generate_plots_real(cache_name="musicatk-nys=20-multiplier=200", nmf_algs=["nsnmf"])
 # generate_plots_synthetic()
 # generate_rho_performance_plots_synthetic()
