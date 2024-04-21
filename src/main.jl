@@ -21,7 +21,7 @@ function rank_determination(X, ks; nmfargs=())
   results
 end
 
-function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200)
+function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200, r_mode=false)
   println("program start...")
   signatures_unsorted = CSV.read("../synthetic-data-2023/alexandrov2015_signatures.tsv", DataFrame; delim='\t')
   signatures = sort(signatures_unsorted)
@@ -37,8 +37,8 @@ function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200)
     "contaminated" => "-contamination-2",
     "overdispersed" => "-overdispersed-2.0",
     "perturbed" => "-perturbed-0.0025")
-  cache_name = "nys=$(nysamples)-multiplier=$(multiplier)"
-  nmf_algs = ["multdiv", "greedycd"]
+  cache_name = r_mode ? "musicatk-nys=$(nysamples)-multiplier=$(multiplier)" : "nys=$(nysamples)-multiplier=$(multiplier)"
+  nmf_algs = r_mode ? ["nmf"] : ["multdiv", "greedycd"]
 
   println("start looping...")
   Base.Filesystem.mkpath("../result-cache/$(cache_name)/")
@@ -55,8 +55,15 @@ function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200)
       data = CSV.read("../synthetic-data-2023/synthetic-$(cancer_categories[cancer])$(misspecification_type[misspec]).tsv", DataFrame; delim='\t')
       X = Matrix(data[:, 2:end])
 
-      results = rank_determination(X, 1:nloadings+3;
-        nmfargs=(; alg=Symbol(nmf_alg), replicates=16, ncpu=16))
+      ks = 1:nloadings+3
+      if r_mode
+        Ws = [CSV.read("../raw-cache-R/synthetic/$(nmf_alg)/$(cancer)-$(misspec)$(k)-W.csv", DataFrame)[:, 2:end] for k in ks] .|> Matrix
+        Hs = [CSV.read("../raw-cache-R/synthetic/$(nmf_alg)/$(cancer)-$(misspec)$(k)-H.csv", DataFrame)[:, 2:end] for k in ks] .|> Matrix{Float64}
+        results = NMF.Result{Float64}.(Ws, Hs, 0, true, 0)
+      else
+        results = rank_determination(X, ks;
+          nmfargs=(; alg=Symbol(nmf_alg), replicates=16, ncpu=16))
+      end
       componentwise_losses = Vector{Vector{Float64}}(undef, length(results))
       Threads.@threads for i in eachindex(results)
         r = results[i]
@@ -319,7 +326,7 @@ function generate_plots_real(; cache_name="nys=20-multiplier=200", nmf_algs=["mu
   end
 end
 
-# cache_result_real(; r_mode=true, ks=1:21)
-generate_plots_real(cache_name="musicatk-nys=20-multiplier=200", nmf_algs=["nsnmf"])
+cache_result_synthetic(; r_mode=true)
+# generate_plots_real(cache_name="musicatk-nys=20-multiplier=200", nmf_algs=["nsnmf"])
 # generate_plots_synthetic()
 # generate_rho_performance_plots_synthetic()
