@@ -2,7 +2,7 @@
 
 julia_version = "1.10.2"
 manifest_format = "2.0"
-project_hash = "96fc54ebe32ba473b6c14783d1cdbcd14998b5d6"
+project_hash = "40e49b929d6420312cb1050bde472d020b951873"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -140,6 +140,14 @@ deps = ["Dates", "IntervalSets", "IterTools", "RangeArrays"]
 git-tree-sha1 = "16351be62963a67ac4083f748fdb3cca58bfd52f"
 uuid = "39de3d68-74b9-583c-8d2d-e117c070f3a9"
 version = "0.4.7"
+
+[[deps.BSSMF]]
+deps = ["Distributions", "LinearAlgebra", "MAT", "MKL", "MKLSparse", "Parameters", "Random", "SparseArrays", "Statistics"]
+git-tree-sha1 = "a9f9437bae85412b781cf180a6b4d8a6c65846c3"
+repo-rev = "main"
+repo-url = "https://gitlab.com/vuthanho/bssmf.jl"
+uuid = "0d1fcf0a-e50b-4372-9ea3-a9900152eab1"
+version = "0.1.0"
 
 [[deps.BSplineKit]]
 deps = ["ArrayLayouts", "BandedMatrices", "FastGaussQuadrature", "LinearAlgebra", "PrecompileTools", "Random", "Reexport", "SparseArrays", "Static", "StaticArrays", "StaticArraysCore"]
@@ -1198,6 +1206,18 @@ version = "0.10.6"
 git-tree-sha1 = "65f28ad4b594aebe22157d6fac869786a255b7eb"
 uuid = "6c6e2e6c-3030-632d-7369-2d6c69616d65"
 version = "0.1.4"
+
+[[deps.MKL]]
+deps = ["Artifacts", "Libdl", "LinearAlgebra", "Logging", "MKL_jll"]
+git-tree-sha1 = "17f06b6fb5198b757413d8379bfa62246c5da5a3"
+uuid = "33e6dc65-8f57-5167-99aa-e5a354878fb2"
+version = "0.6.3"
+
+[[deps.MKLSparse]]
+deps = ["LinearAlgebra", "MKL_jll", "SparseArrays"]
+git-tree-sha1 = "c5fd60128db7d4e0ad2358d1017d293c81a49335"
+uuid = "0c723cd3-b8cd-5d40-b370-ba682dde9aae"
+version = "1.1.0"
 
 [[deps.MKL_jll]]
 deps = ["Artifacts", "IntelOpenMP_jll", "JLLWrappers", "LazyArtifacts", "Libdl"]

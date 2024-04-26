@@ -1,12 +1,13 @@
 module Utils
 export invcdf, threaded_nmf, count_matrix_from_WH
 export signature_plot, signature_side2side, signature_bestmatch, bubbles, rho_k_losses
-export score_by_cosine_difference, rho_k_bottom
+export compare_against_gt, rho_k_bottom
 export rho_performance_factory
 
 using Distributions
 using Makie
 using NMF
+using BSSMF
 using DataFrames
 using LinearAlgebra
 using Hungarian
@@ -53,7 +54,10 @@ end
 TODO: add documentation
 """
 function rho_performance_factory(gt_loadings::DataFrame, gt_signatures::DataFrame, nmf_results::Vector{NMF.Result{T}}, componentwise_losses;
-  weighting_function=(cd, ld) -> cd + tanh(0.2ld)) where {T<:Number}
+  weighting_function=(wdiff, hdiff) -> wdiff + tanh(0.2hdiff),
+  w_metric=(w, w_gt) -> 1 - (normalize(w)' * normalize(w_gt)),
+  h_metric=(h, h_gt) -> abs(h - h_gt) / h_gt) where {T<:Number}
+
   zero_points = componentwise_losses .|> l -> (length(l), maximum(l))
   sort!(zero_points; by=last)
 
@@ -66,7 +70,6 @@ function rho_performance_factory(gt_loadings::DataFrame, gt_signatures::DataFram
 
   sorted_loadings = sort(gt_loadings, rev=true)
   relevant_signatures = Matrix(gt_signatures[:, sorted_loadings[:, 2]])
-  relsig_normalized_L2 = relevant_signatures * Diagonal(1 ./ norm.(eachcol(relevant_signatures), 2))
   n_gt_sig = nrow(gt_loadings)
 
   GT_sig_loadings = sorted_loadings[:, 1]
@@ -84,10 +87,9 @@ function rho_performance_factory(gt_loadings::DataFrame, gt_signatures::DataFram
     W_L1 = norm.(eachcol(W), 1)
     avg_inferred_loadings = dropdims(sum(Diagonal(W_L1) * H; dims=2); dims=2) / N
 
-    W_normalized_L2 = W * Diagonal(1 ./ norm.(eachcol(W), 2))
-    cosine_diffs = 1 .- (W_normalized_L2' * relsig_normalized_L2)
-    loading_diffs = Iterators.product(avg_inferred_loadings, GT_sig_loadings) .|> ((inferred, GT),) -> abs(inferred - GT) / GT
-    combined_diffs = weighting_function.(cosine_diffs, loading_diffs)
+    w_diffs = Iterators.product(eachcol(W), eachcol(relevant_signatures)) .|> x -> w_metric(x...)
+    h_diffs = Iterators.product(avg_inferred_loadings, GT_sig_loadings) .|> x -> h_metric(x...)
+    combined_diffs = weighting_function.(w_diffs, h_diffs)
     assignment, _ = hungarian(combined_diffs)
 
     @assert !haskey(worst_performing_inferrences, K)
@@ -161,12 +163,14 @@ end
 TODO: add documentation
 """
 function bubbles(gridpos, gt_loadings::DataFrame, gt_signatures::DataFrame, nmf_results::Vector{NMF.Result{T}};
-  weighting_function=(cd, ld) -> cd + tanh(0.2ld)) where {T<:Number}
+  weighting_function=(wdiff, hdiff) -> wdiff + tanh(0.2hdiff),
+  w_metric=(w, w_gt) -> 1 - (normalize(w)' * normalize(w_gt)),
+  h_metric=(h, h_gt) -> abs(h - h_gt) / h_gt) where {T<:Number}
+
   subfig = GridLayout()
 
   sorted_loadings = sort(gt_loadings, rev=true)
   relevant_signatures = Matrix(gt_signatures[:, sorted_loadings[:, 2]])
-  relsig_normalized_L2 = relevant_signatures * Diagonal(1 ./ norm.(eachcol(relevant_signatures), 2))
   n_gt_sig = nrow(gt_loadings)
 
   GT_sig = sorted_loadings[:, 2]
@@ -204,15 +208,14 @@ function bubbles(gridpos, gt_loadings::DataFrame, gt_signatures::DataFrame, nmf_
     W_L1 = Diagonal(norm.(eachcol(W), 1))
     avg_inferred_loadings = dropdims(sum(W_L1 * H; dims=2); dims=2) / N
 
-    W_normalized_L2 = W * Diagonal(1 ./ norm.(eachcol(W), 2))
-    cosine_diffs = 1 .- (W_normalized_L2' * relsig_normalized_L2)
-    loading_diffs = Iterators.product(avg_inferred_loadings, GT_sig_loadings) .|> ((inferred, GT),) -> abs(inferred - GT) / GT
-    combined_diffs = weighting_function.(cosine_diffs, loading_diffs)
+    w_diffs = Iterators.product(eachcol(W), eachcol(relevant_signatures)) .|> x -> w_metric(x...)
+    h_diffs = Iterators.product(avg_inferred_loadings, GT_sig_loadings) .|> x -> h_metric(x...)
+    combined_diffs = weighting_function.(w_diffs, h_diffs)
     assignment, _ = hungarian(combined_diffs)
 
     points = Point2f.(r_idx + 0.5, assignment)
     scatter!(ax, points; colorrange, colormap, strokewidth, highclip,
-      markersize=radius.(avg_inferred_loadings), color=[cosine_diffs[i, assignment[i]] for i in 1:K])
+      markersize=radius.(avg_inferred_loadings), color=[w_diffs[i, assignment[i]] for i in 1:K])
   end
   legend = Legend(gridpos, group_size, string.(legendradiuses), "Mean Loading";
     tellheight=true, patchsize=(35, 35))
@@ -229,15 +232,25 @@ end
 """
 NMF.jl package's high level function nnmf, 
 but can specify how many cpus to run in parallel for replicates
+if the algorithm name :bssmf, then we use the implementation 
+on gitlab.com/vuthanho/BSSMF.jl instead
 """
-function threaded_nmf(X, k; replicates=1, ncpu=1, kwargs...)
+function threaded_nmf(X, k; replicates=1, ncpu=1, alg=:multdiv, kwargs...)
   results = Vector{NMF.Result{Float64}}(undef, replicates)
   c = Channel() do ch
     foreach(i -> put!(ch, i), 1:replicates)
   end
 
-  Threads.foreach(c; ntasks=ncpu) do i
-    results[i] = nnmf(X, k; kwargs..., replicates=1)
+  if alg == :bssmf
+    Threads.foreach(c; ntasks=ncpu) do i
+      workspace = Workspace(X, k)
+      bssmf!(workspace; kwargs...)
+      results[i] = NMF.Result{Float64}(workspace.W, workspace.H, 0, true, 0)
+    end
+  else
+    Threads.foreach(c; ntasks=ncpu) do i
+      results[i] = nnmf(X, k; alg, kwargs..., replicates=1)
+    end
   end
   _, min_idx = findmin(x -> x.objvalue, results)
   return results[min_idx]
@@ -249,14 +262,16 @@ The score is computed by bipartite matching against ground truth
   w.r.t. the cosine difference.
 Returns max relative mean loading difference and maximum difference
 """
-function score_by_cosine_difference(gt_loadings::DataFrame, gt_signatures::DataFrame, nmf_result::NMF.Result{T};
-  weighting_function=(cd, ld) -> cd + tanh(0.2ld)) where {T<:Number}
+function compare_against_gt(gt_loadings::DataFrame, gt_signatures::DataFrame, nmf_result::NMF.Result{T};
+  weighting_function=(wdiff, hdiff) -> wdiff + tanh(0.2hdiff),
+  w_metric=(w, w_gt) -> 1 - (normalize(w)' * normalize(w_gt)),
+  h_metric=(h, h_gt) -> abs(h - h_gt) / h_gt) where {T<:Number}
+
   # loadings are sorted in order of decreasing importance
   sorted_loadings = sort(gt_loadings, rev=true)
   GT_sig_loadings = sorted_loadings[:, 1]
 
   relevant_signatures = Matrix(gt_signatures[:, sorted_loadings[:, 2]])
-  relsig_normalized_L2 = relevant_signatures * Diagonal(1 ./ norm.(eachcol(relevant_signatures), 2))
   W = nmf_result.W
   H = nmf_result.H
   _, N = size(H)
@@ -264,14 +279,13 @@ function score_by_cosine_difference(gt_loadings::DataFrame, gt_signatures::DataF
   W_L1 = norm.(eachcol(W), 1)
   avg_inferred_loadings = dropdims(sum(Diagonal(W_L1) * H; dims=2); dims=2) / N
 
-  W_normalized_L2 = W * Diagonal(1 ./ norm.(eachcol(W), 2))
-  cosine_diffs = 1 .- (W_normalized_L2' * relsig_normalized_L2)
-  loading_diffs = Iterators.product(avg_inferred_loadings, GT_sig_loadings) .|> ((inferred, GT),) -> abs(inferred - GT) / GT
-  combined_diffs = weighting_function.(cosine_diffs, loading_diffs)
+  w_diffs = Iterators.product(eachcol(W), eachcol(relevant_signatures)) .|> x -> w_metric(x...)
+  h_diffs = Iterators.product(avg_inferred_loadings, GT_sig_loadings) .|> x -> h_metric(x...)
+  combined_diffs = weighting_function.(w_diffs, h_diffs)
   assignment, _ = hungarian(combined_diffs)
 
-  return (maximum([loading_diffs[i, gt] for (i, gt) in enumerate(assignment)]),
-    maximum([cosine_diffs[i, gt] for (i, gt) in enumerate(assignment)]))
+  return (maximum([h_diffs[i, gt] for (i, gt) in enumerate(assignment)]),
+    maximum([w_diffs[i, gt] for (i, gt) in enumerate(assignment)]))
 end
 
 """

@@ -99,8 +99,8 @@ function distance_from_standard_uniform(d::KDEUniform)
   return sum(valid_losses)
 end
 
-function componentwise_loss(X::Matrix{I}, W::Matrix{F}, H::Matrix{F};
-  approx_type::Type{T}=KDEUniform, nysamples::Integer=1, approxargs=()) where {T<:UniformApproximate,F<:AbstractFloat,I<:Integer}
+function componentwise_loss(X::Matrix{R}, W::Matrix{F}, H::Matrix{F};
+  approx_type::Type{T}=KDEUniform, nysamples::Integer=1, approxargs=()) where {T<:UniformApproximate,F<:AbstractFloat,R<:Real}
 
   empirical_eps = generate_empirical_eps_sets(X, W, H, approx_type; nysamples, approxargs)
   return dropdims(sum(distance_from_standard_uniform.(empirical_eps); dims=1); dims=1)
@@ -111,18 +111,18 @@ function stare_from_componentwise_loss(cwl, rho; lambda=0.01)
   return sum(max.(0, cwl .- rho)) + lambda * K
 end
 
-function structurally_aware_loss(X::Matrix{I}, W::Matrix{F}, H::Matrix{F}, rho::F;
+function structurally_aware_loss(X::Matrix{R}, W::Matrix{F}, H::Matrix{F}, rho::F;
   lambda::F=0.01, approx_type::Type{T}=KDEUniform,
-  kwargs...) where {T<:UniformApproximate,F<:AbstractFloat,I<:Integer}
+  kwargs...) where {T<:UniformApproximate,F<:AbstractFloat,R<:Real}
 
   componentwise_loss = componentwise_loss(X, W, H; approx_type, kwargs)
   K = length(componentwise_loss)
   return sum(max.(0, componentwise_loss .- rho)) + lambda * K
 end
 
-function structurally_aware_loss(X::Matrix{I}, W::Matrix{F}, H::Matrix{F}, rho::Vector{F};
+function structurally_aware_loss(X::Matrix{R}, W::Matrix{F}, H::Matrix{F}, rho::Vector{F};
   lambda::F=0.01, approx_type::Type{T}=KDEUniform,
-  kwargs...) where {T<:UniformApproximate,F<:AbstractFloat,I<:Integer}
+  kwargs...) where {T<:UniformApproximate,F<:AbstractFloat,R<:Real}
 
   componentwise_loss = componentwise_loss(X, W, H; approx_type, kwargs)
   K = length(componentwise_loss)
@@ -130,8 +130,8 @@ function structurally_aware_loss(X::Matrix{I}, W::Matrix{F}, H::Matrix{F}, rho::
 end
 
 
-function generate_empirical_eps_sets(X::Matrix{I}, W::Matrix{F}, H::Matrix{F}, approx_type::Type{T};
-  nysamples::Integer=1, approxargs=()) where {T<:UniformApproximate,F<:AbstractFloat,I<:Integer}
+function generate_empirical_eps_sets(X::Matrix{R}, W::Matrix{F}, H::Matrix{F}, approx_type::Type{T};
+  nysamples::Integer=1, approxargs=()) where {T<:UniformApproximate,F<:AbstractFloat,R<:Real}
 
   # sanity checking
   D_X, N_X = size(X)

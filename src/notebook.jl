@@ -15,10 +15,13 @@ begin
 end
 
 # ╔═╡ 983d24f4-c094-40ab-b96b-b81048990965
+# ╠═╡ disabled = true
+#=╠═╡
 begin
 	ENV["PYCALL_JL_RUNTIME_PYTHON"] = Sys.which("python")
 	using PyCall
 end
+  ╠═╡ =#
 
 # ╔═╡ 5546058d-11be-48f0-a4c1-036dc9a80a3a
 begin
@@ -46,8 +49,14 @@ begin
 	using Hungarian
 end
 
+# ╔═╡ d5219149-5834-419c-a4e3-f6486658c70f
+using MAT
+
 # ╔═╡ 02db4599-b3d2-4913-bbc1-4324f8650b00
 using LinearAlgebra
+
+# ╔═╡ ac8a9354-0165-4cfb-8d87-4049eaccf680
+using BSSMF
 
 # ╔═╡ 627df66e-cbc7-11ee-0e3e-c770eabc3dde
 html"""
@@ -153,32 +162,6 @@ all_loadings = npzread("../synthetic-data-2023/synthetic-113-ovary-adenoca-all-l
 # ╔═╡ 93d11fb4-cd84-4eb7-bf98-de0839f51991
 mutation_type = "overdispersed"
 
-# ╔═╡ 620eb068-f906-4b3b-b374-55f50a587b6c
-function threaded_nmf(X, k; replicates=1, ncpu=1, kwargs...)
-	results = Vector{NMF.Result{Float64}}(undef, replicates)
-	c = Channel() do ch
-		foreach(i -> put!(ch, i), 1:replicates)
-	end
-
-	Threads.foreach(c; ntasks=ncpu) do i
-		results[i] = nnmf(X, k; kwargs..., replicates=1)
-	end
-	_, min_idx = findmin(x -> x.objvalue, results)
-	return results[min_idx]
-end
-
-# ╔═╡ 627eb8be-d921-4059-81af-e5c59b4766e4
-# ╠═╡ disabled = true
-#=╠═╡
-result_none = threaded_nmf(Float64.(X[(cancer, mutation_type)]), 8; alg=:greedycd, maxiter=200000, replicates=10, tol=1e-5, ncpu=8)
-  ╠═╡ =#
-
-# ╔═╡ 4a2cdaa9-ab22-4cc2-9970-f75a1e78463f
-# ╠═╡ disabled = true
-#=╠═╡
-typeof(result_none)
-  ╠═╡ =#
-
 # ╔═╡ da97570d-42d2-4a54-82e4-454306e8b424
 # ╠═╡ disabled = true
 #=╠═╡
@@ -213,151 +196,8 @@ Axis(Figure())
 mvnmf_model.W
   ╠═╡ =#
 
-# ╔═╡ 6b87776f-11a7-441c-8b5b-7b23ac74ba87
-begin
-	local results, ks = load("../result-cache/rho-k-$(cancer_categories[cancer])$(misspecification_type["none"]).jld2", "results", "ks")
-	# loadings are sorted in order of decreasing importance
-	local sorted_loadings = sort(loadings, rev=true)
-	local relevant_signatures = Matrix(signatures[:, sorted_loadings[:, 2]])
-    local relsig_normalized_L2 = relevant_signatures * Diagonal(1 ./ norm.(eachcol(relevant_signatures), 2)) 
-	local n_gt_sig = nrow(loadings)
-	local GT_sig = sorted_loadings[:, 2]
-	local GT_sig_loading = sorted_loadings[:, 1]
-	
-	local fig = Figure(size=(1600, 800))
-	local ax = Axis(fig[1, 1]; limits=((0, n_gt_sig+1), (0, n_gt_sig+1)), yticks=(1:n_gt_sig, GT_sig), xticks=(0.5:n_gt_sig+1, ["GT"; ["K = $(k)" for k in ks[1:n_gt_sig]]]))
-
-	local strokewidth = 1
-	local colormap = :dense
-	local colorrange = (0, 0.3)
-	local radius = x -> 50 * sqrt(x / maximum(GT_sig_loading))
-	local points = Point2f.(0.5, 1:n_gt_sig)
-	local legendradiuses = [1000, 2000, 4000]
-	local markersizes = radius.(legendradiuses)
-	local group_size = [MarkerElement(; marker = :circle, color = :white,
-    	strokewidth, markersize = ms) for ms in markersizes]
-	
-	scatter!(ax, points; markersize=radius.(GT_sig_loading), color=fill(0, n_gt_sig), colorrange, colormap, strokewidth)
-	lines!(ax, [1, 1], [0, n_gt_sig+1]; linewidth=3)
-	
-	for (r_idx, r) in enumerate(results[1:n_gt_sig])
-		W = r.W
-		H = r.H
-		K, N = size(H)
-	
-		W_normalized_L2 = W * Diagonal(1 ./ norm.(eachcol(W), 2))
-		alignment_grid = 1 .- (W_normalized_L2' * relsig_normalized_L2)
-		assignment, total_diff = hungarian(alignment_grid)
-
-		# Matrix W as a dataframe with each column being a signature
-		W_L1 = norm.(eachcol(W), 1)
-		avg_inferred_loadings = dropdims(sum(Diagonal(W_L1) * H; dims=2); dims=2) / N
-		points = Point2f.(r_idx + 0.5, assignment)
-		scatter!(ax, points; markersize=radius.(avg_inferred_loadings), color=[alignment_grid[i, assignment[i]] for i in 1:K], colorrange, colormap, strokewidth)
-	end
-
-	Legend(fig[1, 2][1, 1], group_size, string.(legendradiuses), "Mean Loading", tellheight=true, patchsize=(35, 35))
-	Colorbar(fig[1, 2][2, 1]; colormap, colorrange, label="Cosine Error", alignmode=Outside(), halign=:left, size=40)
-	display(fig[1, 2][1, 1])
-	fig
-end
-
-# ╔═╡ e2ea8a1b-2d5c-4e4a-a0ad-c5c07d70a0a1
-typeof(loadings)
-
-# ╔═╡ ba274fa6-cf7f-47b4-a787-d7ed328871a3
-# ╠═╡ disabled = true
-#=╠═╡
-begin
-	local Kmax = 21
-	local avg_diffs = fill(0., Kmax)
-	local max_diffs = fill(0., Kmax)
-	# loadings are sorted in order of decreasing importance
-	local sorted_loadings = sort(loadings, rev=true)
-	local relevant_signatures = Matrix(signatures[:, sorted_loadings[:, 2]])
-	local relsig_normalized_L2 = relevant_signatures * Diagonal(1 ./ norm.(eachcol(relevant_signatures), 2))
-	for k in 1:Kmax
-		result_none = threaded_nmf(Float64.(X[(cancer, "overdispersed")]), k; alg=:greedycd, maxiter=200000, replicates=8, tol=1e-4)
-		W = result_none.W
-		W_normalized_L2 = W * Diagonal(1 ./ norm.(eachcol(W), 2))
-
-		alignment_grid = 1 .- (relsig_normalized_L2' * W_normalized_L2)
-		assignment, total_diff = hungarian(alignment_grid)
-		
-		max_dif = 0
-		for (i, a) in enumerate(assignment)
-			max_dif = a == 0 ? max_dif : max(max_dif, alignment_grid[i, a])
-		end
-		max_diffs[k] =  max_dif
-		avg_diffs[k] = total_diff / k
-	end
-	local fig = Figure()
-	local ax = Axis(fig[1, 1], xticks=1:Kmax)
-	lines!(ax, 1:Kmax, avg_diffs, label="avg diff")
-	lines!(ax, 1:Kmax, max_diffs, label="max diff")
-	axislegend(ax)
-	fig
-end
-  ╠═╡ =#
-
-# ╔═╡ 978de3ab-cfe5-49b8-aea4-c1fff9e96c60
-function rho_k_losses(losses, rho; krange=1:length(losses), plot_title="", kwargs...)
-	fig = Figure(size=(800, 600))
-	ax = Axis(fig[1, 1], yscale=log10, title=plot_title)
-	for k in krange
-		lines!(ax, rho, losses[k], label="k=$(k)")
-	end
-	Legend(fig[1, 2], ax, "Legend")
-	fig
-end
-
-# ╔═╡ 6d35f0d2-4764-484f-bd3a-8773665ff780
-function rank_determination(X, ks, rho; approx_type=StareNMF.KDEUniform, nmfargs=(), kwargs...)
-	losses = Array{Vector{Float64}}(undef, length(ks))
-	for (i, k) in collect(enumerate(ks))
-		result = threaded_nmf(Float64.(X), k; alg=:multdiv, maxiter=200000, tol=1e-4, nmfargs...)
-		losses[i] = StareNMF.structurally_aware_loss(X, result.W, result.H, rho; lambda=0.01, approx_type, kwargs...)
-	end
-	rho_k_losses(losses, rho; kwargs...)
-end
-
 # ╔═╡ c4f83f8a-2148-42e1-b5b2-b5582528b804
 nmf_alg = :greedycd
-
-# ╔═╡ 2a4ac0fe-8752-4cce-b4d6-4941a4e93599
-# ╠═╡ disabled = true
-#=╠═╡
-rank_determination(X[(cancer, "none")], 1:nrow(loadings)+3, collect(0:0.01:10), 
-	multiplier=500, plot_title="Not misspecified",
-	nmfargs=(; alg=nmf_alg, replicates=5))
-  ╠═╡ =#
-
-# ╔═╡ a13b180c-b443-4e9d-8437-01d67d2c3691
-# ╠═╡ disabled = true
-#=╠═╡
-rank_determination(X[(cancer, "contaminated")], 1:nrow(loadings)+3, collect(0:0.01:10), 
-	multiplier=500, plot_title="Contaminated",
-	nmfargs=(; alg=nmf_alg, replicates=5))
-  ╠═╡ =#
-
-# ╔═╡ 0d961f8c-5f4c-47e9-92b4-5193c051743b
-# ╠═╡ disabled = true
-#=╠═╡
-rank_determination(X[(cancer, "perturbed")], 1:nrow(loadings)+3, collect(0:0.01:10), 
-	multiplier=500, plot_title="Perturbed",
-	nmfargs=(; alg=nmf_alg, replicates=5))
-  ╠═╡ =#
-
-# ╔═╡ 05e8316a-e797-4142-8211-5c8a5c11d4ca
-# ╠═╡ disabled = true
-#=╠═╡
-rank_determination(X[(cancer, "overdispersed")], 1:nrow(loadings)+3, collect(0:0.01:10), 
-	multiplier=500, plot_title="Overdispersed",
-	nmfargs=(; alg=nmf_alg, replicates=5))
-  ╠═╡ =#
-
-# ╔═╡ 82eff34d-820d-4f08-aec5-73ba15aac2c9
-# TODO: generate all plots, best match, buuble plots
 
 # ╔═╡ 649162b9-f080-438d-ad98-4b175bd1afe4
 begin
@@ -376,8 +216,47 @@ begin
 	gl.content[1].content.content
 end
 
-# ╔═╡ cf6a3dce-ce23-42d4-b4f1-1b6a2b3db332
-round(Int, 1234312.328104)
+# ╔═╡ 1ce40635-cde0-4c76-b932-12db32e5346a
+end6 = matread("../hyperspectral-unmixing-datasets/urban/end6_groundTruth.mat")
+
+# ╔═╡ 27f955b6-c5ca-4946-873a-1ab9b384e55b
+sum(end6["M"]; dims=1)
+
+# ╔═╡ a5c53190-4a3f-4402-898a-351a50de1a7a
+CSV.write("../hyperspectral-unmixing-datasets/urban/signatures.csv", DataFrame(end6["M"], dropdims(end6["cood"]; dims=2)))
+
+# ╔═╡ 7c9efdaa-0179-4d04-bd96-217eaa95a2d3
+CSV.write("../hyperspectral-unmixing-datasets/urban/loadings.csv", DataFrame(loading=dropdims(sum(end6["A"]; dims=2); dims=2) / size(end6["A"], 2), signature=dropdims(end6["cood"]; dims=2)))
+
+# ╔═╡ 81a64acd-01b6-49a0-8688-94bbb5c0d34a
+size(end6["A"], 2)
+
+# ╔═╡ 0d7d0447-f9dc-4313-b21d-48f5e635404e
+a = rand(2, 3)
+
+# ╔═╡ 5c804d0b-295c-4468-9f72-990091e1260a
+b = rand(3, 4)
+
+# ╔═╡ 19078865-0f66-4073-9e45-ee0e61e72fb5
+collect(Iterators.product(eachcol(a), eachcol(b)))
+
+# ╔═╡ f687170e-dbb0-4925-9026-d8ebe1b316c6
+
+
+# ╔═╡ 7c1f1d4e-01e2-47a9-bba3-e585a2190bf7
+DataFrame(loading=dropdims(sum(end6["A"]; dims=2); dims=2) / size(end6["A"], 2), signature=dropdims(end6["cood"]; dims=2))
+
+# ╔═╡ 62b6385b-2848-42b4-aa30-889d25faf218
+urban = matread("../hyperspectral-unmixing-datasets/urban/Urban_R162.mat")
+
+# ╔═╡ 65f2a5d0-2902-473f-adcb-ddbf5e77b584
+CSV.write("../hyperspectral-unmixing-datasets/urban/data.csv", Tables.table(urban["Y"]))
+
+# ╔═╡ 05b059b2-35fd-44bf-b8cc-7e54ed87e0f0
+Matrix(CSV.read("../hyperspectral-unmixing-datasets/urban/data.csv", DataFrame))
+
+# ╔═╡ 1cb61efd-c351-446c-9245-9921c6b0cf20
+
 
 # ╔═╡ Cell order:
 # ╟─627df66e-cbc7-11ee-0e3e-c770eabc3dde
@@ -388,6 +267,7 @@ round(Int, 1234312.328104)
 # ╠═70b7302e-9598-477e-8709-72308857b2b2
 # ╠═6c6286bf-deaf-4e35-b98d-2df7cd701514
 # ╠═1e1b6c5f-241e-4d17-a24b-6745f4eed907
+# ╠═d5219149-5834-419c-a4e3-f6486658c70f
 # ╠═02db4599-b3d2-4913-bbc1-4324f8650b00
 # ╠═c46c00c8-0e6c-4ea8-bb7a-6b54a29bd535
 # ╠═c493008d-df0f-4869-bbf8-d0cfe215ad48
@@ -405,22 +285,23 @@ round(Int, 1234312.328104)
 # ╠═2d31c27f-8e9f-4b0c-8f16-1030245434cd
 # ╠═172d00f7-42f3-419c-bc6a-e87d9691f691
 # ╠═93d11fb4-cd84-4eb7-bf98-de0839f51991
-# ╠═620eb068-f906-4b3b-b374-55f50a587b6c
-# ╠═627eb8be-d921-4059-81af-e5c59b4766e4
-# ╠═4a2cdaa9-ab22-4cc2-9970-f75a1e78463f
 # ╠═da97570d-42d2-4a54-82e4-454306e8b424
 # ╠═f6698f24-6d09-4501-94af-3c73652e2678
 # ╠═b0416ef3-ffd8-4200-a66c-5a8c1e44ac09
-# ╠═6b87776f-11a7-441c-8b5b-7b23ac74ba87
-# ╠═e2ea8a1b-2d5c-4e4a-a0ad-c5c07d70a0a1
-# ╠═ba274fa6-cf7f-47b4-a787-d7ed328871a3
-# ╠═978de3ab-cfe5-49b8-aea4-c1fff9e96c60
-# ╠═6d35f0d2-4764-484f-bd3a-8773665ff780
 # ╠═c4f83f8a-2148-42e1-b5b2-b5582528b804
-# ╠═2a4ac0fe-8752-4cce-b4d6-4941a4e93599
-# ╠═a13b180c-b443-4e9d-8437-01d67d2c3691
-# ╠═0d961f8c-5f4c-47e9-92b4-5193c051743b
-# ╠═05e8316a-e797-4142-8211-5c8a5c11d4ca
-# ╠═82eff34d-820d-4f08-aec5-73ba15aac2c9
 # ╠═649162b9-f080-438d-ad98-4b175bd1afe4
-# ╠═cf6a3dce-ce23-42d4-b4f1-1b6a2b3db332
+# ╠═1ce40635-cde0-4c76-b932-12db32e5346a
+# ╠═27f955b6-c5ca-4946-873a-1ab9b384e55b
+# ╠═a5c53190-4a3f-4402-898a-351a50de1a7a
+# ╠═7c9efdaa-0179-4d04-bd96-217eaa95a2d3
+# ╠═81a64acd-01b6-49a0-8688-94bbb5c0d34a
+# ╠═0d7d0447-f9dc-4313-b21d-48f5e635404e
+# ╠═5c804d0b-295c-4468-9f72-990091e1260a
+# ╠═19078865-0f66-4073-9e45-ee0e61e72fb5
+# ╠═f687170e-dbb0-4925-9026-d8ebe1b316c6
+# ╠═7c1f1d4e-01e2-47a9-bba3-e585a2190bf7
+# ╠═62b6385b-2848-42b4-aa30-889d25faf218
+# ╠═65f2a5d0-2902-473f-adcb-ddbf5e77b584
+# ╠═05b059b2-35fd-44bf-b8cc-7e54ed87e0f0
+# ╠═ac8a9354-0165-4cfb-8d87-4049eaccf680
+# ╠═1cb61efd-c351-446c-9245-9921c6b0cf20

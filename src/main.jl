@@ -12,19 +12,45 @@ using .StareNMF.Utils
 using CairoMakie
 CairoMakie.activate!(type="svg")
 
-function rank_determination(X, ks; nmfargs=())
+function rank_determination(X, ks; alg=:multdiv, nmfargs=())
   results = Array{NMF.Result}(undef, length(ks))
+  nmfargs = alg == :bssmf ? nmfargs : (; tol=1e-4, nmfargs...)
   for (i, k) in collect(enumerate(ks))
-    result = threaded_nmf(Float64.(X), k; alg=:multdiv, maxiter=200000, tol=1e-4, nmfargs...)
+    result = threaded_nmf(Float64.(X), k; alg, maxiter=200000, nmfargs...)
     results[i] = result
   end
   results
 end
 
+function cache_result_hyprunmix(; overwrite=false, nysamples=20, multiplier=200)
+  println("program start...")
+  cache_name = "nys=$(nysamples)-multiplier=$(multiplier)"
+  nmf_algs = ["bssmf"]
+
+  println("start looping...")
+  data = CSV.read("../hyperspectral-unmixing-datasets/urban/data.csv", DataFrame)
+  X = Matrix(data)
+  Base.Filesystem.mkpath("../result-cache-hyprunmix/urban/$(cache_name)/")
+  for nmf_alg in nmf_algs
+    if isfile("../result-cache-hyprunmix/urban/$(cache_name)/cache-$(nmf_alg)-hyprunmix-urban.jld2") && !overwrite
+      continue
+    end
+
+    ks = 1:9
+    results = rank_determination(X, ks;
+      nmfargs=(; alg=Symbol(nmf_alg), replicates=16, ncpu=16))
+
+    componentwise_losses = Vector{Vector{Float64}}(undef, length(results))
+    Threads.@threads for i in eachindex(results)
+      r = results[i]
+      componentwise_losses[i] = componentwise_loss(X, r.W, r.H; nysamples, approxargs=(; multiplier))
+    end
+    jldsave("../result-cache-hyprunmix/urban/$(cache_name)/cache-$(nmf_alg)-hyprunmix-urban.jld2"; results, componentwise_losses)
+  end
+end
+
 function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200, r_mode=false)
   println("program start...")
-  signatures_unsorted = CSV.read("../synthetic-data-2023/alexandrov2015_signatures.tsv", DataFrame; delim='\t')
-  signatures = sort(signatures_unsorted)
   cancer_categories = Dict(
     "skin" => "107-skin-melanoma-all-seed-1",
     "ovary" => "113-ovary-adenoca-all-seed-1",
@@ -41,14 +67,14 @@ function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200,
   nmf_algs = r_mode ? ["nmf"] : ["multdiv", "greedycd"]
 
   println("start looping...")
-  Base.Filesystem.mkpath("../result-cache/$(cache_name)/")
+  Base.Filesystem.mkpath("../result-cache-synthetic/$(cache_name)/")
   for nmf_alg in nmf_algs, cancer in keys(cancer_categories)
     loadings = CSV.read("../synthetic-data-2023/synthetic-$(cancer_categories[cancer])-GT-loadings.csv", DataFrame; header=0)
     nloadings = nrow(loadings)
 
     for misspec in keys(misspecification_type)
       println("alg: $(nmf_alg)\tcancer: $(cancer)\tmisspec: $(misspec)")
-      if isfile("../result-cache/$(cache_name)/cache-$(nmf_alg)-$(cancer_categories[cancer])$(misspecification_type[misspec]).jld2") && !overwrite
+      if isfile("../result-cache-synthetic/$(cache_name)/cache-$(nmf_alg)-$(cancer_categories[cancer])$(misspecification_type[misspec]).jld2") && !overwrite
         continue
       end
 
@@ -69,7 +95,7 @@ function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200,
         r = results[i]
         componentwise_losses[i] = componentwise_loss(X, r.W, r.H; nysamples, approxargs=(; multiplier))
       end
-      jldsave("../result-cache/$(cache_name)/cache-$(nmf_alg)-$(cancer_categories[cancer])$(misspecification_type[misspec]).jld2"; results, componentwise_losses)
+      jldsave("../result-cache-synthetic/$(cache_name)/cache-$(nmf_alg)-$(cancer_categories[cancer])$(misspecification_type[misspec]).jld2"; results, componentwise_losses)
     end
   end
 end
@@ -119,7 +145,7 @@ function cache_result_real(; overwrite=false, nysamples=20, multiplier=200, r_mo
   end
 end
 
-function generate_rho_performance_plots_synthetic()
+function generate_rho_performance_plots_synthetic(; cache_name="nys=20-multiplier=200", nmf_algs=["multdiv", "greedycd"])
   println("program start...")
   signatures_unsorted = CSV.read("../synthetic-data-2023/alexandrov2015_signatures.tsv", DataFrame; delim='\t')
   signatures = sort(signatures_unsorted)
@@ -135,8 +161,6 @@ function generate_rho_performance_plots_synthetic()
     "contaminated" => "-contamination-2",
     "overdispersed" => "-overdispersed-2.0",
     "perturbed" => "-perturbed-0.0025")
-  nmf_algs = ["multdiv", "greedycd"]
-  cache_name = "nys=20-multiplier=200"
 
   println("start looping...")
   for nmf_alg in nmf_algs
@@ -160,7 +184,7 @@ function generate_rho_performance_plots_synthetic()
         # data = CSV.read("../synthetic-data-2023/synthetic-$(cancer_categories[cancer])$(misspecification_type[misspec]).tsv", DataFrame; delim='\t')
         # X = Matrix(data[:, 2:end])
 
-        file = load("../result-cache/$(cache_name)/cache-$(nmf_alg)-$(cancer_categories[cancer])$(misspecification_type[misspec]).jld2")
+        file = load("../result-cache-synthetic/$(cache_name)/cache-$(nmf_alg)-$(cancer_categories[cancer])$(misspecification_type[misspec]).jld2")
         results = [r for r in file["results"]]
         componentwise_losses = file["componentwise_losses"]
 
@@ -184,7 +208,7 @@ function generate_rho_performance_plots_synthetic()
   end
 end
 
-function generate_plots_synthetic()
+function generate_plots_synthetic(; cache_name="nys=20-multiplier=200", nmf_algs=["multdiv", "greedycd"])
   println("program start...")
   signatures_unsorted = CSV.read("../synthetic-data-2023/alexandrov2015_signatures.tsv", DataFrame; delim='\t')
   signatures = sort(signatures_unsorted)
@@ -200,8 +224,6 @@ function generate_plots_synthetic()
     "contaminated" => "-contamination-2",
     "overdispersed" => "-overdispersed-2.0",
     "perturbed" => "-perturbed-0.0025")
-  nmf_algs = ["multdiv", "greedycd"]
-  cache_name = "nys=20-multiplier=200"
 
   println("start looping...")
   for nmf_alg in nmf_algs, cancer in keys(cancer_categories)
@@ -216,7 +238,7 @@ function generate_plots_synthetic()
       # data = CSV.read("../synthetic-data-2023/synthetic-$(cancer_categories[cancer])$(misspecification_type[misspec]).tsv", DataFrame; delim='\t')
       # X = Matrix(data[:, 2:end])
 
-      file = load("../result-cache/$(cache_name)/cache-$(nmf_alg)-$(cancer_categories[cancer])$(misspecification_type[misspec]).jld2")
+      file = load("../result-cache-synthetic/$(cache_name)/cache-$(nmf_alg)-$(cancer_categories[cancer])$(misspecification_type[misspec]).jld2")
       results = [r for r in file["results"]]
       componentwise_losses = file["componentwise_losses"]
 
@@ -237,7 +259,7 @@ function generate_plots_synthetic()
       ax2 = Axis(fig; yscale=identity, limits=(nothing, (0, nothing)),
         xticks=(1.5:length(valid_results)+0.5, ["K = $(i)" for i in 1:length(valid_results)]))
 
-      mrl_maxes = score_by_cosine_difference.([loadings], [signatures], valid_results; weighting_function=(cd, ld) -> cd + tanh(0.1ld))
+      mrl_maxes = compare_against_gt.([loadings], [signatures], valid_results; weighting_function=(cd, ld) -> cd + tanh(0.1ld))
       lines!(ax1, 1.5:length(valid_results)+0.5, [mm[1] for mm in mrl_maxes]; label="max relative loading difference")
       lines!(ax2, 1.5:length(valid_results)+0.5, [mm[2] for mm in mrl_maxes]; label="max difference", color=:orange)
       linkxaxes!(ax_bubs, ax1, ax2)
@@ -307,7 +329,7 @@ function generate_plots_real(; cache_name="nys=20-multiplier=200", nmf_algs=["mu
     ax2 = Axis(fig; yscale=identity, limits=(nothing, (0, nothing)),
       xticks=(1.5:length(valid_results)+0.5, ["K = $(i)" for i in 1:length(valid_results)]))
 
-    mrl_maxes = score_by_cosine_difference.([loadings], [signatures], valid_results; weighting_function=(cd, _) -> cd)
+    mrl_maxes = compare_against_gt.([loadings], [signatures], valid_results; weighting_function=(cd, _) -> cd)
     lines!(ax2, 1.5:length(valid_results)+0.5, [mm[2] for mm in mrl_maxes]; label="max difference", color=:orange)
     linkxaxes!(ax_bubs, ax2)
     subfig_bubs[1, 1] = ax2
@@ -326,7 +348,8 @@ function generate_plots_real(; cache_name="nys=20-multiplier=200", nmf_algs=["mu
   end
 end
 
-cache_result_synthetic(; r_mode=true)
-# generate_plots_real(cache_name="musicatk-nys=20-multiplier=200", nmf_algs=["nsnmf"])
-# generate_plots_synthetic()
-# generate_rho_performance_plots_synthetic()
+# cache_result_synthetic(; r_mode=true)
+# generate_plots_real(; cache_name="musicatk-nys=20-multiplier=200", nmf_algs=["nsnmf"])
+# generate_plots_synthetic(; cache_name="musicatk-nys=20-multiplier=200", nmf_algs=["nmf"])
+# generate_rho_performance_plots_synthetic(; cache_name="musicatk-nys=20-multiplier=200", nmf_algs=["nmf"])
+cache_result_hyprunmix()
