@@ -12,11 +12,12 @@ using .StareNMF.Utils
 using CairoMakie
 CairoMakie.activate!(type="svg")
 
-function rank_determination(X, ks; alg=:multdiv, nmfargs=())
+function rank_determination(X, ks; nmfargs=())
   results = Array{NMF.Result}(undef, length(ks))
-  nmfargs = alg == :bssmf ? nmfargs : (; tol=1e-4, nmfargs...)
+  nmfargs = (; alg=:multdiv, nmfargs...) # default algorithm
+  nmfargs = nmfargs.alg == :bssmf ? nmfargs : (; tol=1e-4, nmfargs...)
   for (i, k) in collect(enumerate(ks))
-    result = threaded_nmf(Float64.(X), k; alg, maxiter=200000, nmfargs...)
+    result = threaded_nmf(Float64.(X), k; maxiter=200000, nmfargs...)
     results[i] = result
   end
   results
