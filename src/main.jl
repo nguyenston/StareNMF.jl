@@ -39,7 +39,7 @@ function cache_result_hyprunmix(; overwrite=false, nysamples=20, multiplier=200)
 
     ks = 1:9
     results = rank_determination(X, ks;
-      nmfargs=(; alg=Symbol(nmf_alg), replicates=16, ncpu=16))
+      nmfargs=(; alg=Symbol(nmf_alg), maxiter=5000, replicates=16, ncpu=16))
 
     componentwise_losses = Vector{Vector{Float64}}(undef, length(results))
     Threads.@threads for i in eachindex(results)
