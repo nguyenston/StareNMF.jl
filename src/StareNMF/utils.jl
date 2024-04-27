@@ -244,8 +244,8 @@ function threaded_nmf(X, k; replicates=1, ncpu=1, alg=:multdiv, kwargs...)
   if alg == :bssmf
     Threads.foreach(c; ntasks=ncpu) do i
       workspace = Workspace(X, k)
-      bssmf!(workspace; kwargs...)
-      results[i] = NMF.Result{Float64}(workspace.W, workspace.H, 0, true, 0)
+      err, err_time = bssmf!(workspace; kwargs...)
+      results[i] = NMF.Result{Float64}(workspace.W, workspace.H, 0, true, err[end])
     end
   else
     Threads.foreach(c; ntasks=ncpu) do i
