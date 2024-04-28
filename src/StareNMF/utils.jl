@@ -231,9 +231,10 @@ end
 
 """
 NMF.jl package's high level function nnmf, 
-but can specify how many cpus to run in parallel for replicates
-if the algorithm name :bssmf, then we use the implementation 
-on gitlab.com/vuthanho/BSSMF.jl instead
+but can specify how many cpus to run in parallel for replicates.
+If the algorithm name :bssmf, then we use the implementation 
+on gitlab.com/vuthanho/BSSMF.jl instead. 
+Note: ncpu is irrelevant for :bssmf
 """
 function threaded_nmf(X, k; replicates=1, ncpu=1, alg=:multdiv, kwargs...)
   results = Vector{NMF.Result{Float64}}(undef, replicates)
@@ -242,7 +243,7 @@ function threaded_nmf(X, k; replicates=1, ncpu=1, alg=:multdiv, kwargs...)
   end
 
   if alg == :bssmf
-    Threads.foreach(c; ntasks=ncpu) do i
+    for i in eachindex(results)
       workspace = Workspace(X, k)
       err, err_time = bssmf!(workspace; kwargs...)
       results[i] = NMF.Result{Float64}(workspace.W, workspace.H, 0, true, err[end])
