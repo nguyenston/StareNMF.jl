@@ -30,7 +30,7 @@ function cache_result_hyprunmix(; overwrite=false, nysamples=20, multiplier=200)
 
   println("start looping...")
   data = CSV.read("../hyperspectral-unmixing-datasets/urban/data.csv", DataFrame)
-  X = Matrix(data)
+  X = Matrix{Int}(data)
   Base.Filesystem.mkpath("../result-cache-hyprunmix/urban/$(cache_name)/")
   for nmf_alg in nmf_algs
     if isfile("../result-cache-hyprunmix/urban/$(cache_name)/cache-$(nmf_alg)-hyprunmix-urban.jld2") && !overwrite
