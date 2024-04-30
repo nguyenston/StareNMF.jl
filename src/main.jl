@@ -39,14 +39,14 @@ function cache_result_hyprunmix(; overwrite=false, nysamples=20, multiplier=200)
 
     ks = 1:9
     results = rank_determination(X, ks;
-      nmfargs=(; alg=Symbol(nmf_alg), maxiter=100, replicates=1, ncpu=1, verbose=true))
+      nmfargs=(; alg=Symbol(nmf_alg), maxiter=1000, replicates=1, ncpu=1, verbose=true))
 
     componentwise_losses = Vector{Vector{Float64}}(undef, length(results))
-    Threads.@threads for i in eachindex(results)
-      r = results[i]
-      componentwise_losses[i] = componentwise_loss(X, r.W, r.H; nysamples, approxargs=(; multiplier))
-    end
-    jldsave("../result-cache-hyprunmix/urban/$(cache_name)/cache-$(nmf_alg)-hyprunmix-urban.jld2"; results, componentwise_losses)
+    # Threads.@threads for i in eachindex(results)
+    #   r = results[i]
+    #   componentwise_losses[i] = componentwise_loss(X, r.W, r.H; nysamples, approxargs=(; multiplier))
+    # end
+    jldsave("../result-cache-hyprunmix/urban/$(cache_name)/cache-$(nmf_alg)-hyprunmix-urban.jld2"; results)
   end
 end
 
@@ -353,4 +353,4 @@ end
 # generate_plots_real(; cache_name="musicatk-nys=20-multiplier=200", nmf_algs=["nsnmf"])
 # generate_plots_synthetic(; cache_name="musicatk-nys=20-multiplier=200", nmf_algs=["nmf"])
 # generate_rho_performance_plots_synthetic(; cache_name="musicatk-nys=20-multiplier=200", nmf_algs=["nmf"])
-cache_result_hyprunmix()
+cache_result_hyprunmix(; overwrite=true)
