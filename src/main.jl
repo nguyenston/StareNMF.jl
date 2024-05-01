@@ -23,7 +23,7 @@ function rank_determination(X, ks; nmfargs=())
   results
 end
 
-function cache_result_hyprunmix(; overwrite=false, nysamples=20, multiplier=200)
+function cache_result_hyprunmix(; overwrite=false, nysamples=20, multiplier=1)
   println("program start...")
   cache_name = "nys=$(nysamples)-multiplier=$(multiplier)"
   nmf_algs = ["bssmf"]
@@ -50,7 +50,7 @@ function cache_result_hyprunmix(; overwrite=false, nysamples=20, multiplier=200)
   end
 end
 
-function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200, r_mode=false)
+function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200, r_mode=false, nmf_algs=[])
   println("program start...")
   cancer_categories = Dict(
     "skin" => "107-skin-melanoma-all-seed-1",
@@ -65,7 +65,7 @@ function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200,
     "overdispersed" => "-overdispersed-2.0",
     "perturbed" => "-perturbed-0.0025")
   cache_name = r_mode ? "musicatk-nys=$(nysamples)-multiplier=$(multiplier)" : "nys=$(nysamples)-multiplier=$(multiplier)"
-  nmf_algs = r_mode ? ["nmf"] : ["multdiv", "greedycd"]
+  nmf_algs = r_mode ? ["nmf"] : nmf_algs
 
   println("start looping...")
   Base.Filesystem.mkpath("../result-cache-synthetic/$(cache_name)/")
@@ -89,7 +89,7 @@ function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200,
         results = NMF.Result{Float64}.(Ws, Hs, 0, true, 0)
       else
         results = rank_determination(X, ks;
-          nmfargs=(; alg=Symbol(nmf_alg), replicates=16, ncpu=16))
+          nmfargs=(; alg=Symbol(nmf_alg), replicates=16, ncpu=16, simplex_W=true))
       end
       componentwise_losses = Vector{Vector{Float64}}(undef, length(results))
       Threads.@threads for i in eachindex(results)
@@ -101,7 +101,7 @@ function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200,
   end
 end
 
-function cache_result_real(; overwrite=false, nysamples=20, multiplier=200, r_mode=false, ks=1:21)
+function cache_result_real(; overwrite=false, nysamples=20, multiplier=200, r_mode=false, ks=1:21, nmf_algs=[])
   println("program start...")
   cancer_categories = Dict(
     "skin" => "Skin-Melanoma",
@@ -111,7 +111,7 @@ function cache_result_real(; overwrite=false, nysamples=20, multiplier=200, r_mo
     "lung" => "Lung-SCC",
     "stomach" => "Stomach-AdenoCA")
   cache_name = r_mode ? "musicatk-nys=$(nysamples)-multiplier=$(multiplier)" : "nys=$(nysamples)-multiplier=$(multiplier)"
-  nmf_algs = r_mode ? ["nsnmf"] : ["multdiv", "greedycd"]
+  nmf_algs = r_mode ? ["nsnmf"] : nmf_algs
 
   println("start looping...")
   Base.Filesystem.mkpath("../result-cache-real/$(cache_name)/")
@@ -133,7 +133,7 @@ function cache_result_real(; overwrite=false, nysamples=20, multiplier=200, r_mo
       results = NMF.Result{Float64}.(Ws, Hs, 0, true, 0)
     else
       results = rank_determination(X, ks;
-        nmfargs=(; alg=Symbol(nmf_alg), replicates=16, ncpu=16, maxiter=400000))
+        nmfargs=(; alg=Symbol(nmf_alg), replicates=16, ncpu=16, maxiter=400000, simplex_W=true))
     end
 
     # compute componentwise losses
@@ -349,8 +349,9 @@ function generate_plots_real(; cache_name="nys=20-multiplier=200", nmf_algs=["mu
   end
 end
 
-# cache_result_synthetic(; r_mode=true)
+cache_result_synthetic(; nmf_algs=["bssmf"])
+cache_result_real(; nmf_algs=["bssmf"])
 # generate_plots_real(; cache_name="musicatk-nys=20-multiplier=200", nmf_algs=["nsnmf"])
 # generate_plots_synthetic(; cache_name="musicatk-nys=20-multiplier=200", nmf_algs=["nmf"])
 # generate_rho_performance_plots_synthetic(; cache_name="musicatk-nys=20-multiplier=200", nmf_algs=["nmf"])
-cache_result_hyprunmix(; overwrite=true)
+# cache_result_hyprunmix(; overwrite=true)
