@@ -236,7 +236,7 @@ If the algorithm name :bssmf, then we use the implementation
 on gitlab.com/vuthanho/BSSMF.jl instead. 
 Note: ncpu is irrelevant for :bssmf
 """
-function threaded_nmf(X, k; replicates=1, ncpu=1, alg=:multdiv, simplex_W=false, kwargs...)
+function threaded_nmf(X, k; replicates=1, ncpu=1, alg=:multdiv, simplex_W=false, verbose=false, kwargs...)
   results = Vector{NMF.Result{Float64}}(undef, replicates)
   c = Channel() do ch
     foreach(i -> put!(ch, i), 1:replicates)
@@ -249,7 +249,7 @@ function threaded_nmf(X, k; replicates=1, ncpu=1, alg=:multdiv, simplex_W=false,
 
     for i in eachindex(results)
       workspace = Workspace(X_processed, k)
-      err, err_time = bssmf!(workspace; kwargs...)
+      err, _ = bssmf!(workspace; verbose, kwargs...)
 
       l1_col_W = norm.(eachcol(workspace.W))
       W = workspace.W ./ l1_col_W'

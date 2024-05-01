@@ -63,7 +63,11 @@ struct KDEUniform{T<:AbstractFloat} <: UniformApproximate
   KDEUniform(components::Vector{Tuple{T,T}}; multiplier::Integer=1, save_sample=false) where {T} = begin
     samples = T[]
     for (a, b) in components
-      @assert 0 <= a <= b <= 1 "invalid component: a = $(a), b = $(b)"
+      if !(0 <= a <= b <= 1)
+        println("Warning: invalid component: a = $(a), b = $(b), skipped")
+        continue
+      end
+
       if a < b
         append!(samples, rand(Uniform(a, b), multiplier))
       else
