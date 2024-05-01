@@ -42,15 +42,15 @@ function cache_result_hyprunmix(; overwrite=false, nysamples=20, multiplier=1)
       nmfargs=(; alg=Symbol(nmf_alg), maxiter=1000, replicates=1, ncpu=1, verbose=true))
 
     componentwise_losses = Vector{Vector{Float64}}(undef, length(results))
-    # Threads.@threads for i in eachindex(results)
-    #   r = results[i]
-    #   componentwise_losses[i] = componentwise_loss(X, r.W, r.H; nysamples, approxargs=(; multiplier))
-    # end
-    jldsave("../result-cache-hyprunmix/urban/$(cache_name)/cache-$(nmf_alg)-hyprunmix-urban.jld2"; results)
+    Threads.@threads for i in eachindex(results)
+      r = results[i]
+      componentwise_losses[i] = componentwise_loss(X, r.W, r.H; nysamples, approxargs=(; multiplier))
+    end
+    jldsave("../result-cache-hyprunmix/urban/$(cache_name)/cache-$(nmf_alg)-hyprunmix-urban.jld2"; results, componentwise_losses)
   end
 end
 
-function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200, r_mode=false, nmf_algs=[])
+function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200, r_mode=false, nmfargs=(), nmf_algs=[])
   println("program start...")
   cancer_categories = Dict(
     "skin" => "107-skin-melanoma-all-seed-1",
@@ -89,7 +89,7 @@ function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200,
         results = NMF.Result{Float64}.(Ws, Hs, 0, true, 0)
       else
         results = rank_determination(X, ks;
-          nmfargs=(; alg=Symbol(nmf_alg), replicates=16, ncpu=16, simplex_W=true))
+          nmfargs=(; alg=Symbol(nmf_alg), replicates=16, ncpu=16, simplex_W=true, nmfargs...))
       end
       componentwise_losses = Vector{Vector{Float64}}(undef, length(results))
       Threads.@threads for i in eachindex(results)
@@ -101,7 +101,7 @@ function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200,
   end
 end
 
-function cache_result_real(; overwrite=false, nysamples=20, multiplier=200, r_mode=false, ks=1:21, nmf_algs=[])
+function cache_result_real(; overwrite=false, nysamples=20, multiplier=200, r_mode=false, ks=1:21, nmfargs=(), nmf_algs=[])
   println("program start...")
   cancer_categories = Dict(
     "skin" => "Skin-Melanoma",
@@ -133,7 +133,7 @@ function cache_result_real(; overwrite=false, nysamples=20, multiplier=200, r_mo
       results = NMF.Result{Float64}.(Ws, Hs, 0, true, 0)
     else
       results = rank_determination(X, ks;
-        nmfargs=(; alg=Symbol(nmf_alg), replicates=16, ncpu=16, maxiter=400000, simplex_W=true))
+        nmfargs=(; alg=Symbol(nmf_alg), replicates=16, ncpu=16, maxiter=400000, simplex_W=true, nmfargs...))
     end
 
     # compute componentwise losses
@@ -349,9 +349,9 @@ function generate_plots_real(; cache_name="nys=20-multiplier=200", nmf_algs=["mu
   end
 end
 
-cache_result_synthetic(; nmf_algs=["bssmf"])
-cache_result_real(; nmf_algs=["bssmf"])
+# cache_result_synthetic(; nmf_algs=["bssmf"])
+# cache_result_real(; nmf_algs=["bssmf"])
 # generate_plots_real(; cache_name="musicatk-nys=20-multiplier=200", nmf_algs=["nsnmf"])
-# generate_plots_synthetic(; cache_name="musicatk-nys=20-multiplier=200", nmf_algs=["nmf"])
-# generate_rho_performance_plots_synthetic(; cache_name="musicatk-nys=20-multiplier=200", nmf_algs=["nmf"])
+generate_plots_synthetic(; cache_name="nys=20-multiplier=200", nmf_algs=["bssmf"])
+generate_rho_performance_plots_synthetic(; cache_name="nys=20-multiplier=200", nmf_algs=["bssmf"])
 # cache_result_hyprunmix(; overwrite=true)
