@@ -23,22 +23,21 @@ end
 """
 use makie to plot a mutation signature
 """
-function signature_plot(gridpos, signatures, sig; title="")
-  s = signatures[:, sig]
+function signature_plot(gridpos, signature; title="")
   subfig = GridLayout()
 
   colors = [:blue, :black, :red, :grey, :green, :pink]
   barlabels = ["C>A", "C>G", "C>T", "T>A", "T>C", "T>G"]
   color_index = collect(0:96-1) ./ 16 .|> floor .|> Int .|> x -> x + 1
 
-  signature_axis = Axis(gridpos, xticksvisible=false, xticklabelsvisible=false, title=title,
+  signature_axis = Axis(gridpos; xticksvisible=false, xticklabelsvisible=false, title=title,
     ytickformat=values -> ["$(round(v*100; digits=2))%" for v in values], limits=((-1, 97), (0, nothing)))
-  label_axis = Axis(gridpos, xticks=(8:16:88, barlabels), xticksvisible=false,
+  label_axis = Axis(gridpos; xticks=(8:16:88, barlabels), xticksvisible=false,
     yticksvisible=false, yticklabelsvisible=false, xgridvisible=false, ygridvisible=false,
     bottomspinevisible=false, topspinevisible=false, leftspinevisible=false, rightspinevisible=false,
     xticklabelfont=:bold, limits=((-1, 97), (0, 1)))
 
-  barplot!(signature_axis, 0.5:95.5, s, color=colors[color_index], width=1)
+  barplot!(signature_axis, 0.5:95.5, signature, color=colors[color_index], width=1)
   barplot!(label_axis, 8:16:88, fill(1, 6); width=16, gap=0.05, color=colors,
     bar_labels=barlabels, label_offset=4, label_font=:bold)
 
@@ -251,7 +250,7 @@ function threaded_nmf(X, k; replicates=1, ncpu=1, alg=:multdiv, simplex_W=false,
       workspace = Workspace(X_processed, k)
       err, _ = bssmf!(workspace; verbose, kwargs...)
 
-      l1_col_W = norm.(eachcol(workspace.W))
+      l1_col_W = simplex_W ? norm.(eachcol(workspace.W)) : ones(Float64, size(workspace.W, 2))
       W = workspace.W ./ l1_col_W'
       H = workspace.H .* (l1_col_W * l1_col_X')
       results[i] = NMF.Result{Float64}(W, H, 0, true, err[end])
@@ -302,19 +301,24 @@ Bipartite match inferred results against ground truth signatures
   w.r.t. the cosine difference. Plot the results side by side
 """
 function signature_side2side(gt_loadings::DataFrame, gt_signatures::DataFrame, nmf_results::Vector{NMF.Result{T}};
-  nmf_result_names::Vector{String}=fill("", length(nmf_results))) where {T<:Number}
+  nmf_result_names::Vector{String}=fill("", length(nmf_results)),
+  weighting_function=(wdiff, hdiff) -> wdiff + tanh(0.2hdiff),
+  w_metric=(w, w_gt) -> 1 - (normalize(w)' * normalize(w_gt)),
+  h_metric=(h, h_gt) -> abs(h - h_gt) / h_gt,
+  sigplot=signature_plot) where {T<:Number}
 
   # loadings are sorted in order of decreasing importance
   n_gt_sig = nrow(gt_loadings)
   sorted_loadings = sort(gt_loadings, rev=true)
+  GT_sig_loadings = sorted_loadings[:, 1]
+
   relevant_signatures = Matrix(gt_signatures[:, sorted_loadings[:, 2]])
-  relsig_normalized_L2 = relevant_signatures * Diagonal(1 ./ norm.(eachcol(relevant_signatures), 2))
 
   fig = Figure(size=(600 * (length(nmf_results) + 1), 200 * n_gt_sig))
   for i in 1:n_gt_sig
     GT_sig = sorted_loadings[i, 2]
     GT_sig_loading = sorted_loadings[i, 1]
-    Utils.signature_plot(fig[i, 1], gt_signatures, GT_sig; title="$(GT_sig), avg_loading=$(round(GT_sig_loading, digits=2))")
+    sigplot(fig[i, 1], gt_signatures[:, GT_sig]; title="$(GT_sig), avg_loading=$(round(GT_sig_loading, digits=2))")
   end
   for (r_idx, r) in enumerate(nmf_results)
     W = r.W
@@ -323,17 +327,18 @@ function signature_side2side(gt_loadings::DataFrame, gt_signatures::DataFrame, n
 
     # Matrix W as a dataframe with each column being a signature
     W_L1 = norm.(eachcol(W), 1)
-    avg_inferred_loadings = sum(Diagonal(W_L1) * H; dims=2) / N
+    avg_inferred_loadings = dropdims(sum(Diagonal(W_L1) * H; dims=2); dims=2) / N
     W_dataframe = DataFrame(W * Diagonal(1 ./ W_L1), ["$i" for i in 1:size(W)[2]])
 
-    W_normalized_L2 = W * Diagonal(1 ./ norm.(eachcol(W), 2))
-    alignment_grid = 1 .- (relsig_normalized_L2' * W_normalized_L2)
-    assignment, _ = hungarian(alignment_grid)
+    w_diffs = Iterators.product(eachcol(W), eachcol(relevant_signatures)) .|> x -> w_metric(x...)
+    h_diffs = Iterators.product(avg_inferred_loadings, GT_sig_loadings) .|> x -> h_metric(x...)
+    combined_diffs = weighting_function.(w_diffs, h_diffs)'
+    assignment, _ = hungarian(combined_diffs)
 
     for (GT_sig_id, inferred_sig) in enumerate(assignment)
       if inferred_sig != 0
-        diff = alignment_grid[GT_sig_id, inferred_sig]
-        Utils.signature_plot(fig[GT_sig_id, r_idx+1], W_dataframe, "$(inferred_sig)";
+        diff = combined_diffs[GT_sig_id, inferred_sig]
+        sigplot(fig[GT_sig_id, r_idx+1], W_dataframe[:, "$(inferred_sig)"];
           title="$(nmf_result_names[r_idx]) $(inferred_sig), diff=$(round(diff, digits=2)), avg_loading=$(round(avg_inferred_loadings[inferred_sig], digits=2))")
       end
     end
@@ -370,9 +375,9 @@ function signature_bestmatch(gt_loadings::DataFrame, gt_signatures::DataFrame, n
     diff = alignment_grid[GT_sig_id, inferred_sig]
     GT_sig = sorted_loadings[GT_sig_id, 2]
     GT_sig_loading = sorted_loadings[GT_sig_id, 1]
-    Utils.signature_plot(fig[inferred_sig, 1], W_dataframe, "$(inferred_sig)";
+    Utils.signature_plot(fig[inferred_sig, 1], W_dataframe[:, "$(inferred_sig)"];
       title="$(nmf_result_name) $(inferred_sig), diff=$(round(diff, digits=2)), avg_loading=$(round(avg_inferred_loadings[inferred_sig], digits=2))")
-    Utils.signature_plot(fig[inferred_sig, 2], gt_signatures, GT_sig; title="$(GT_sig), avg_loading=$(round(GT_sig_loading, digits=2))")
+    Utils.signature_plot(fig[inferred_sig, 2], gt_signatures[:, GT_sig]; title="$(GT_sig), avg_loading=$(round(GT_sig_loading, digits=2))")
   end
   fig
 end
