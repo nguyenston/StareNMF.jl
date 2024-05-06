@@ -147,9 +147,9 @@ function rho_k_bottom(gridpos, componentwise_losses; plot_title="")
   end
   ymin = minimum((x -> x[2]).(points))
   ymax = maximum((x -> x[2]).(points))
-  gap = ymax / ymin
+  gap = ymax / ymin + 0.1
 
-  infer_quality_axis = Axis(gridpos[1, 1]; yscale=log10, yaxisposition=:right, yticklabelcolor=:orange, limits=(nothing, (ymin / 0.5gap, ymax * 0.5gap)))
+  infer_quality_axis = Axis(gridpos[1, 1]; yscale=log10, yaxisposition=:right, yticklabelcolor=:orange, limits=(nothing, (ymin / gap^0.5, ymax * gap^0.5)))
   hidespines!(infer_quality_axis)
   hidexdecorations!(infer_quality_axis)
   plt2 = scatterlines!(infer_quality_axis, points; color=:orange, marker=:dtriangle, label="inferrence quality")
@@ -190,7 +190,7 @@ function bubbles(gridpos, gt_loadings::DataFrame, gt_signatures::DataFrame, nmf_
   colorrange = (0, 0.3)
   radius = x -> 50 * sqrt(x / max_radius)
   points = Point2f.(0.5, 1:n_gt_sig)
-  legendradiuses = [round(max_radius / 4; sigdigits=2), round(max_radius / 2; sigdigits=2), max_radius] .|> Int
+  legendradiuses = [round(max_radius / 4; sigdigits=2), round(max_radius / 2; sigdigits=2), max_radius]
   markersizes = radius.(legendradiuses)
   group_size = [MarkerElement(; marker=:circle, color=:white, strokewidth, markersize=ms) for ms in markersizes]
 
@@ -327,8 +327,8 @@ function signature_side2side(gt_loadings::DataFrame, gt_signatures::DataFrame, n
 
     # Matrix W as a dataframe with each column being a signature
     W_L1 = norm.(eachcol(W), 1)
-    avg_inferred_loadings = dropdims(sum(Diagonal(W_L1) * H; dims=2); dims=2) / N
-    W_dataframe = DataFrame(W * Diagonal(1 ./ W_L1), ["$i" for i in 1:size(W)[2]])
+    avg_inferred_loadings = dropdims(sum(H .* W_L1; dims=2); dims=2) / N
+    W_dataframe = DataFrame(W ./ W_L1', ["$i" for i in 1:size(W)[2]])
 
     w_diffs = Iterators.product(eachcol(W), eachcol(relevant_signatures)) .|> x -> w_metric(x...)
     h_diffs = Iterators.product(avg_inferred_loadings, GT_sig_loadings) .|> x -> h_metric(x...)
