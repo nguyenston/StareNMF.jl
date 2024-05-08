@@ -2,7 +2,7 @@ data {
   int<lower=1> J;
   int<lower=1> I;    
   int<lower=1> K;
-  int<lower=0> X[I, J];
+  array[I, J] int<lower=0> X;
   real<lower=0> alpha;
   real<lower=0> gamma0;  // shape parameters
   real<lower=0> gamma1;  // scale parameters
@@ -18,7 +18,7 @@ parameters {
   vector<lower=0>[K] nu;
   vector<lower=0>[K] mu;
   matrix<lower=0>[K, J] theta;
-  simplex[I] r[K];
+  array[K] simplex[I] r;
 }
         
 model {
