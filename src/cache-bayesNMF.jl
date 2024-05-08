@@ -34,15 +34,15 @@ function main(; overwrite=false)
       end
 
       data = CSV.read("../synthetic-data-2023/synthetic-$(cancer_categories[cancer])$(misspecification_type[misspec]).tsv", DataFrame; delim='\t')
-      X = Matrix(data[:, 2:end])
+      X = Matrix{Int}(data[:, 2:end])
       results = Dict()
       for K in 1:nloadings+3
         println("cancer: $(cancer)\tmisspec: $(misspec)\tK: $(K)")
         hp = hyperpriors[:, "$(cancer)-$(misspec)"]
-        stan_data = (; I=size(X, 1), J=size(X, 2), K, alpha=1.0, gamma0=2.0, gamma1=4.0, delta0=hp[1], delta1=hp[2])
+        stan_data = (; I=size(X, 1), J=size(X, 2), K, X, alpha=1.0, gamma0=2.0, gamma1=4.0, delta0=hp[1], delta1=hp[2])
         model = SampleModel("model-$(cancer)-$(misspec)", stan_program)
 
-        _ = stan_sample(model; stan_data, num_chains=16, num_samples=1000, num_warmups=4000, delta=0.98, max_depth=12)
+        _ = stan_sample(model; data=stan_data, num_chains=16, num_samples=1000, num_warmups=4000, delta=0.98, max_depth=12)
         results[K] = read_samples(model, :dataframe)
       end
 
@@ -50,3 +50,5 @@ function main(; overwrite=false)
     end
   end
 end
+
+main()
