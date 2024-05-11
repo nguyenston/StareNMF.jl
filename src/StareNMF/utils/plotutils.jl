@@ -1,24 +1,9 @@
-module Utils
-export invcdf, threaded_nmf, count_matrix_from_WH
-export signature_plot, signature_side2side, signature_bestmatch, bubbles, rho_k_losses
-export compare_against_gt, rho_k_bottom
-export rho_performance_factory
-
-using Distributions
-using Makie
 using NMF
-using BSSMF
 using DataFrames
 using LinearAlgebra
 using Hungarian
-
-"""
-The generalized inverse of the cdf of a univariate measure
-"""
-function invcdf(d::UnivariateDistribution, lp::Real)
-  @assert 0 <= lp <= 1 "lp needs to be between 0 an 1"
-  return invlogcdf(d, log(lp))
-end
+using Distributions
+using Makie
 
 """
 use makie to plot a mutation signature
@@ -229,42 +214,6 @@ function bubbles(gridpos, gt_loadings::DataFrame, gt_signatures::DataFrame, nmf_
 end
 
 """
-NMF.jl package's high level function nnmf, 
-but can specify how many cpus to run in parallel for replicates.
-If the algorithm name :bssmf, then we use the implementation 
-on gitlab.com/vuthanho/BSSMF.jl instead. 
-Note: ncpu is irrelevant for :bssmf
-"""
-function threaded_nmf(X, k; replicates=1, ncpu=1, alg=:multdiv, simplex_W=false, verbose=false, kwargs...)
-  results = Vector{NMF.Result{Float64}}(undef, replicates)
-  c = Channel() do ch
-    foreach(i -> put!(ch, i), 1:replicates)
-  end
-
-  if alg == :bssmf
-    l1_col_X = simplex_W ? norm.(eachcol(X), 1) : ones(Float64, size(X, 2))
-    X_processed = simplex_W ? reduce(hcat, normalize.(eachcol(X), 1)) : X
-
-
-    for i in eachindex(results)
-      workspace = Workspace(X_processed, k)
-      err, _ = bssmf!(workspace; verbose, kwargs...)
-
-      l1_col_W = simplex_W ? norm.(eachcol(workspace.W)) : ones(Float64, size(workspace.W, 2))
-      W = workspace.W ./ l1_col_W'
-      H = workspace.H .* (l1_col_W * l1_col_X')
-      results[i] = NMF.Result{Float64}(W, H, 0, true, err[end])
-    end
-  else
-    Threads.foreach(c; ntasks=ncpu) do i
-      results[i] = nnmf(X, k; alg, kwargs..., replicates=1)
-    end
-  end
-  _, min_idx = findmin(x -> x.objvalue, results)
-  return results[min_idx]
-end
-
-"""
 Score the nmf result on how good it's inferrences are. 
 The score is computed by bipartite matching against ground truth 
   w.r.t. the cosine difference.
@@ -346,6 +295,9 @@ function signature_side2side(gt_loadings::DataFrame, gt_signatures::DataFrame, n
   fig
 end
 
+"""
+TODO: Add documentation
+"""
 function signature_bestmatch(gt_loadings::DataFrame, gt_signatures::DataFrame, nmf_result::NMF.Result{T};
   nmf_result_name::String="") where {T<:Number}
 
@@ -375,21 +327,9 @@ function signature_bestmatch(gt_loadings::DataFrame, gt_signatures::DataFrame, n
     diff = alignment_grid[GT_sig_id, inferred_sig]
     GT_sig = sorted_loadings[GT_sig_id, 2]
     GT_sig_loading = sorted_loadings[GT_sig_id, 1]
-    Utils.signature_plot(fig[inferred_sig, 1], W_dataframe[:, "$(inferred_sig)"];
+    signature_plot(fig[inferred_sig, 1], W_dataframe[:, "$(inferred_sig)"];
       title="$(nmf_result_name) $(inferred_sig), diff=$(round(diff, digits=2)), avg_loading=$(round(avg_inferred_loadings[inferred_sig], digits=2))")
-    Utils.signature_plot(fig[inferred_sig, 2], gt_signatures[:, GT_sig]; title="$(GT_sig), avg_loading=$(round(GT_sig_loading, digits=2))")
+    signature_plot(fig[inferred_sig, 2], gt_signatures[:, GT_sig]; title="$(GT_sig), avg_loading=$(round(GT_sig_loading, digits=2))")
   end
   fig
-end
-
-
-"""
-TODO: add documentation
-"""
-function count_matrix_from_WH(W::Matrix{T}, H::Matrix{T}) where {T<:Number}
-  V = W * H
-  distr = Poisson.(V)
-  return rand.(distr)
-end
-
 end

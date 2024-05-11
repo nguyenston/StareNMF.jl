@@ -2,7 +2,7 @@
 A technique to determine the appropriate rank K of an NMF
 """
 module StareNMF
-include("./utils.jl")
+include("./utils/utils.jl")
 
 export UniformApproximate
 export PiecewiseUniform, KDEUniform
