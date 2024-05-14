@@ -35,7 +35,6 @@ function main(; overwrite=false)
 
       data = CSV.read("../synthetic-data-2023/synthetic-$(cancer_categories[cancer])$(misspecification_type[misspec]).tsv", DataFrame; delim='\t')
       X = Matrix{Int}(data[:, 2:end])
-      results = Dict()
       for K in 1:nloadings+3
         println("cancer: $(cancer)\tmisspec: $(misspec)\tK: $(K)")
         hp = hyperpriors[:, "$(cancer)-$(misspec)"]
@@ -43,10 +42,10 @@ function main(; overwrite=false)
         model = SampleModel("model-$(cancer)-$(misspec)-$(K)", stan_program)
 
         _ = stan_sample(model; data=stan_data, num_chains=4, num_samples=1000, num_warmups=4000, delta=0.98, max_depth=12, show_logging=true)
-        results[K] = read_samples(model, :dataframe)
+        result = read_samples(model, :dataframe)
+        jldsave("../raw-cache-stan/synthetic/cache-stan-$(cancer_categories[cancer])$(misspecification_type[misspec])-$(K).jld2"; result)
       end
 
-      jldsave("../raw-cache-stan/synthetic/cache-stan-$(cancer_categories[cancer])$(misspecification_type[misspec]).jld2"; results)
     end
   end
 end
