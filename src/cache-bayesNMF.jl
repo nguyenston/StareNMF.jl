@@ -41,11 +41,11 @@ function main(K; overwrite=false)
       stan_data = (; I=size(X, 1), J=size(X, 2), K, X, alpha=1.0, gamma0=2.0, gamma1=4.0, delta0=hp[1], delta1=hp[2])
       model = SampleModel("model-$(cancer)-$(misspec)-$(K)", stan_program)
 
-      _ = stan_sample(model; data=stan_data, num_chains=4, num_samples=1000, num_warmups=4000, delta=0.98, max_depth=12, show_logging=true)
+      _ = stan_sample(model; data=stan_data, num_chains=16, num_samples=1000, num_warmups=4000, delta=0.98, max_depth=12, show_logging=true)
       result = read_samples(model, :dataframe)
       jldsave("../raw-cache-stan/synthetic/cache-stan-$(cancer_categories[cancer])$(misspecification_type[misspec])-$(K).jld2"; result)
     end
   end
 end
 
-main(ARGS[1])
+main(parse(Int, ARGS[1]))
