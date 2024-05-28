@@ -30,7 +30,7 @@ function main(K; overwrite=false)
     nloadings = nrow(loadings)
 
     for misspec in keys(misspecification_type)
-      if isfile("../raw-cache-stan/synthetic/cache-stan-$(cancer_categories[cancer])$(misspecification_type[misspec]).jld2") && !overwrite
+      if isfile("../raw-cache-stan/synthetic/cache-stan-$(cancer_categories[cancer])$(misspecification_type[misspec])-$(K).jld2") && !overwrite
         continue
       end
 
