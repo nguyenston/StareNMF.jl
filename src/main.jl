@@ -23,7 +23,8 @@ function rank_determination(X, ks; nmfargs=())
   results
 end
 
-function cache_result_hyprunmix(; overwrite=false, nysamples=15, multiplier=1, dataset="urban", nmf_algs=["bssmf"], nmfargs=())
+function cache_result_hyprunmix(; overwrite=false, nysamples=15, multiplier=1,
+  dataset="urban", nmf_algs=["bssmf"], nmfargs=(), filenameappend="")
   println("program start...")
   cache_name = "nys=$(nysamples)-multiplier=$(multiplier)"
 
@@ -45,25 +46,75 @@ function cache_result_hyprunmix(; overwrite=false, nysamples=15, multiplier=1, d
       r = results[i]
       componentwise_losses[i] = componentwise_loss(X, r.W * 1000, r.H; nysamples, approxargs=(; multiplier))
     end
-    jldsave("../result-cache-hyprunmix/$(dataset)/$(cache_name)/cache-$(nmf_alg)-hyprunmix-urban.jld2"; results, componentwise_losses)
+    jldsave("../result-cache-hyprunmix/$(dataset)/$(cache_name)/cache-$(nmf_alg)-hyprunmix-urban-$(filenameappend).jld2";
+      results, componentwise_losses)
   end
 end
 
-function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200, r_mode=false, nmfargs=(), nmf_algs=[])
+const default_result_generation = (;
+  cache_name_prepend="",
+  rgen=(cancer, misspec, X, ks, nmf_alg, nmfargs) -> begin
+    results = rank_determination(X, ks;
+      nmfargs=(; alg=Symbol(nmf_alg), replicates=16, ncpu=16, simplex_W=true, nmfargs...))
+    return results
+  end
+)
+const R_result_generation = (;
+  cache_name_prepend="musicatk-",
+  rgen=(cancer, misspec, _, ks, nmf_alg, _) -> begin
+    Ws = [CSV.read("../raw-cache-R/synthetic/$(nmf_alg)/$(cancer)-$(misspec)$(k)-W.csv", DataFrame)[:, 2:end] for k in ks] .|> Matrix
+    Hs = [CSV.read("../raw-cache-R/synthetic/$(nmf_alg)/$(cancer)-$(misspec)$(k)-H.csv", DataFrame)[:, 2:end] for k in ks] .|> Matrix{Float64}
+    results = NMF.Result{Float64}.(Ws, Hs, 0, true, 0)
+    return results
+  end
+)
+const stan_result_generation = (;
+  cache_name_prepend="stan-",
+  rgen=(cancer, misspec, X, ks, _, _) -> begin
+    cancer_categories = Dict(
+      "skin" => "107-skin-melanoma-all-seed-1",
+      "ovary" => "113-ovary-adenoca-all-seed-1",
+      "breast" => "214-breast-all-seed-1",
+      "liver" => "326-liver-hcc-all-seed-1",
+      "lung" => "38-lung-adenoca-all-seed-1",
+      "stomach" => "75-stomach-adenoca-all-seed-1")
+    misspecification_type = Dict(
+      "none" => "",
+      "contaminated" => "-contamination-2",
+      "overdispersed" => "-overdispersed-2.0",
+      "perturbed" => "-perturbed-0.0025")
+    D, N = size(X)
+
+    chain_to_result = K -> begin
+      chain = load("../raw-cache-stan/synthetic/cache-stan-$(cancer_categories[cancer])$(misspecification_type[misspec])-$(K).jld2")["result"]
+      numsamples = nrow(chain)
+      H = Iterators.product(1:K, 1:N) .|> ((k, n),) -> sum(chain[!, "theta.$(k).$(n)"]) / numsamples
+      W = Iterators.product(1:D, 1:K) .|> ((d, k),) -> sum(chain[!, "r.$(k).$(d)"]) / numsamples
+      return NMF.Result{Float64}(W, H, 0, true, 0)
+    end
+
+    results = chain_to_result.(ks)
+    return results
+  end
+)
+function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200, result_generation=default_result_generation, nmfargs=(), nmf_algs=[])
   println("program start...")
   cancer_categories = Dict(
-    "skin" => "107-skin-melanoma-all-seed-1",
-    "ovary" => "113-ovary-adenoca-all-seed-1",
+    # "skin" => "107-skin-melanoma-all-seed-1",
+    # "ovary" => "113-ovary-adenoca-all-seed-1",
     "breast" => "214-breast-all-seed-1",
-    "liver" => "326-liver-hcc-all-seed-1",
-    "lung" => "38-lung-adenoca-all-seed-1",
-    "stomach" => "75-stomach-adenoca-all-seed-1")
+    # "liver" => "326-liver-hcc-all-seed-1",
+    # "lung" => "38-lung-adenoca-all-seed-1",
+    # "stomach" => "75-stomach-adenoca-all-seed-1"
+  )
   misspecification_type = Dict(
     "none" => "",
-    "contaminated" => "-contamination-2",
-    "overdispersed" => "-overdispersed-2.0",
-    "perturbed" => "-perturbed-0.0025")
-  cache_name = r_mode ? "musicatk-nys=$(nysamples)-multiplier=$(multiplier)" : "nys=$(nysamples)-multiplier=$(multiplier)"
+    # "contaminated" => "-contamination-2",
+    # "overdispersed" => "-overdispersed-2.0",
+    # "perturbed" => "-perturbed-0.0025"
+  )
+  cache_name_prepend, rgen = result_generation
+  cache_name = "$(cache_name_prepend)nys=$(nysamples)-multiplier=$(multiplier)"
   nmf_algs = nmf_algs
 
   println("start looping...")
@@ -82,14 +133,7 @@ function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200,
       X = Matrix(data[:, 2:end])
 
       ks = 1:nloadings+3
-      if r_mode
-        Ws = [CSV.read("../raw-cache-R/synthetic/$(nmf_alg)/$(cancer)-$(misspec)$(k)-W.csv", DataFrame)[:, 2:end] for k in ks] .|> Matrix
-        Hs = [CSV.read("../raw-cache-R/synthetic/$(nmf_alg)/$(cancer)-$(misspec)$(k)-H.csv", DataFrame)[:, 2:end] for k in ks] .|> Matrix{Float64}
-        results = NMF.Result{Float64}.(Ws, Hs, 0, true, 0)
-      else
-        results = rank_determination(X, ks;
-          nmfargs=(; alg=Symbol(nmf_alg), replicates=16, ncpu=16, simplex_W=true, nmfargs...))
-      end
+      results = rgen(cancer, misspec, X, ks, nmf_alg, nmfargs)
       componentwise_losses = Vector{Vector{Float64}}(undef, length(results))
       Threads.@threads for i in eachindex(results)
         r = results[i]
@@ -208,22 +252,28 @@ function generate_rho_performance_plots_synthetic(; cache_name="nys=20-multiplie
   end
 end
 
-function generate_plots_hyprunmix(; cache_name="nys=20-multiplier=1", dataset_name="urban", nmf_algs=["bssmf"], rhos=0:0.1:40)
+function generate_plots_hyprunmix(; cache_name="nys=20-multiplier=1", dataset="urban",
+  nmf_algs=["bssmf"], rhos=0:0.1:40, filenameappend="")
   println("program start...")
   signatures = CSV.read("../hyperspectral-unmixing-datasets/urban/signatures.csv", DataFrame)
   loadings = CSV.read("../hyperspectral-unmixing-datasets/urban/loadings.csv", DataFrame)
   nloadings = nrow(loadings)
 
+  data = CSV.read("../hyperspectral-unmixing-datasets/$(dataset)/data.csv", DataFrame)
+  X = Matrix{Int}(data) / 1000
+  N = size(X, 2)
+
   println("start looping...")
+  w_metric = (w, w_gt) -> 1 - (normalize(w)' * normalize(w_gt)) |> (x -> isnan(x) ? 1.0 : x)
   for nmf_alg in nmf_algs
-    Base.Filesystem.mkpath("../plots/hyprunmix/$(dataset_name)/$(cache_name)/composite-$(nmf_alg)/pdf")
-    Base.Filesystem.mkpath("../plots/hyprunmix/$(dataset_name)/$(cache_name)/composite-$(nmf_alg)/svg")
+    Base.Filesystem.mkpath("../plots/hyprunmix/$(dataset)/$(cache_name)/composite-$(nmf_alg)/pdf")
+    Base.Filesystem.mkpath("../plots/hyprunmix/$(dataset)/$(cache_name)/composite-$(nmf_alg)/svg")
 
     # jldsave("../result-cache/rho-k-$(cancer_categories[cancer])$(misspecification_type[misspec]).jld2"; rhos, ks, losses, results)
     # data = CSV.read("../synthetic-data-2023/synthetic-$(cancer_categories[cancer])$(misspecification_type[misspec]).tsv", DataFrame; delim='\t')
     # X = Matrix(data[:, 2:end])
 
-    file = load("../result-cache-hyprunmix/$(dataset_name)/$(cache_name)/cache-$(nmf_alg)-hyprunmix-$(dataset_name)-noclampW.jld2")
+    file = load("../result-cache-hyprunmix/$(dataset)/$(cache_name)/cache-$(nmf_alg)-hyprunmix-$(dataset)$(filenameappend).jld2")
     results = [r for r in file["results"]]
     println([r.converged for r in results])
     componentwise_losses = file["componentwise_losses"]
@@ -240,13 +290,14 @@ function generate_plots_hyprunmix(; cache_name="nys=20-multiplier=1", dataset_na
       loadings,
       signatures,
       valid_results;
+      w_metric,
       weighting_function=(wdiff, hdiff) -> wdiff
     )
     bubs_legend_and_colorbar = GridLayout()
     bubs_legend_and_colorbar[1:2, 1] = subfig_bubs.content[2].content.content .|> x -> x.content
 
 
-    ax1 = Axis(fig; yscale=log10, xticks=(1.5:length(valid_results)+0.5, ["K = $(i)" for i in 1:length(valid_results)]))
+    ax1 = Axis(fig; yscale=identity, xticks=(1.5:length(valid_results)+0.5, ["K = $(i)" for i in 1:length(valid_results)]))
     ax2 = Axis(fig; yscale=identity, limits=(nothing, (0, nothing)),
       xticks=(1.5:length(valid_results)+0.5, ["K = $(i)" for i in 1:length(valid_results)]))
 
@@ -254,9 +305,16 @@ function generate_plots_hyprunmix(; cache_name="nys=20-multiplier=1", dataset_na
       [loadings],
       [signatures],
       valid_results;
+      w_metric,
       weighting_function=(wdiff, hdiff) -> wdiff
     )
-    lines!(ax1, 1.5:length(valid_results)+0.5, [mm[1] for mm in mrl_maxes]; label="max relative loading difference")
+
+    modelargs = [norm(r.W * r.H - X) / sqrt(N) for r in results[1:6]] .|> x -> (x,)
+    model = (m, s) -> Normal(m, s)
+    # modelargs = ()
+    # model = x -> Poisson(x)
+    bic = BIC.([X], results[1:6]; model, modelargs)
+    lines!(ax1, 1.5:length(valid_results)+0.5, bic; label="BIC")
     lines!(ax2, 1.5:length(valid_results)+0.5, [mm[2] for mm in mrl_maxes]; label="max difference", color=:orange)
     linkxaxes!(ax_bubs, ax1, ax2)
     subfig_bubs[1, 1] = ax1
@@ -272,8 +330,8 @@ function generate_plots_hyprunmix(; cache_name="nys=20-multiplier=1", dataset_na
 
     fig[0, :] = Label(fig, "Urban - Hyperspectral unmixing", fontsize=30)
 
-    save("../plots/hyprunmix/$(dataset_name)/$(cache_name)/composite-$(nmf_alg)/pdf/composite-$(nmf_alg)-$(dataset_name)-noclampW.pdf", fig)
-    save("../plots/hyprunmix/$(dataset_name)/$(cache_name)/composite-$(nmf_alg)/svg/composite-$(nmf_alg)-$(dataset_name)-noclampW.svg", fig)
+    save("../plots/hyprunmix/$(dataset)/$(cache_name)/composite-$(nmf_alg)/pdf/composite-$(nmf_alg)-$(dataset)$(filenameappend).pdf", fig)
+    save("../plots/hyprunmix/$(dataset)/$(cache_name)/composite-$(nmf_alg)/svg/composite-$(nmf_alg)-$(dataset)$(filenameappend).svg", fig)
   end
 end
 
@@ -419,8 +477,8 @@ end
 
 # cache_result_synthetic(; nmf_algs=["bssmf"])
 # cache_result_real(; nmf_algs=["bssmf"])
-# generate_plots_real(; cache_name="nys=20-multiplier=200", nmf_algs=["bssmf"])
-# generate_plots_synthetic(; cache_name="nys=20-multiplier=200", nmf_algs=["bssmf"])
-# generate_rho_performance_plots_synthetic(; cache_name="nys=20-multiplier=200", nmf_algs=["bssmf"])
-# generate_plots_hyprunmix(; cache_name="nys=15-multiplier=1", rhos=0:0.1:80)
-cache_result_hyprunmix(; overwrite=true, nmf_algs=["multdiv"], nmfargs=(; replicates=16, ncpu=16))
+# generate_plots_real(; cache_name="nys=20-multiplier=200", nmf_algs=["alspgrad"])
+# generate_plots_synthetic(; cache_name="nys=20-multiplier=200", nmf_algs=["alspgrad"])
+# generate_rho_performance_plots_synthetic(; cache_name="nys=20-multiplier=200", nmf_algs=["alspgrad"])
+generate_plots_hyprunmix(; cache_name="nys=15-multiplier=1", nmf_algs=["greedycd"], rhos=0:0.1:80, filenameappend="lambdaw=0.5-lambdah=1.5")
+# cache_result_hyprunmix(; overwrite=true, nmf_algs=["multdiv"], nmfargs=(; replicates=16, ncpu=16))
