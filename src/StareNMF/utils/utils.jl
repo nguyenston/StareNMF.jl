@@ -1,7 +1,7 @@
 module Utils
 export invcdf, threaded_nmf, count_matrix_from_WH
 export signature_plot, signature_side2side, signature_bestmatch, bubbles, rho_k_losses
-export compare_against_gt, rho_k_bottom
+export compare_against_gt, BIC, rho_k_bottom
 export rho_performance_factory
 
 include("./plotutils.jl")

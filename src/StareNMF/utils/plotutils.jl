@@ -246,6 +246,17 @@ function compare_against_gt(gt_loadings::DataFrame, gt_signatures::DataFrame, nm
 end
 
 """
+TODO: add documentation
+"""
+function BIC(X, nmf_result::NMF.Result{T}; model=(mu, sigma) -> Normal(mu, sigma), modelargs=(1,)) where {T}
+  K, N = size(nmf_result.H)
+  WH = nmf_result.W * nmf_result.H
+  lpdf = logpdf.(model.(WH, modelargs...), X)
+  return K * log(N) - 2sum(lpdf)
+end
+
+
+"""
 Bipartite match inferred results against ground truth signatures
   w.r.t. the cosine difference. Plot the results side by side
 """
