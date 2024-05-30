@@ -13,7 +13,7 @@ function main(K; overwrite=false)
     # "ovary" => "113-ovary-adenoca-all-seed-1",
     "breast" => "214-breast-all-seed-1",
     # "liver" => "326-liver-hcc-all-seed-1",
-    "lung" => "38-lung-adenoca-all-seed-1",
+    # "lung" => "38-lung-adenoca-all-seed-1",
     # "stomach" => "75-stomach-adenoca-all-seed-1"
   )
   misspecification_type = Dict(
@@ -34,14 +34,22 @@ function main(K; overwrite=false)
         continue
       end
 
-      data = CSV.read("../synthetic-data-2023/synthetic-$(cancer_categories[cancer])$(misspecification_type[misspec]).tsv", DataFrame; delim='\t')
-      X = Matrix{Int}(data[:, 2:end])
+      file = load("../result-cache-synthetic/nys=20-multiplier=200/cache-greedycd-$(cancer_categories[cancer])$(misspecification_type[misspec]).jld2")
+      result = file["results"][K]
+
+      norm_coeff = eachcol(result.W) .|> (x -> norm(x, 1))
+      W = result.W ./ norm_coeff'
+      H = result.H .* norm_coeff
+
+      count_dataframe = CSV.read("../synthetic-data-2023/synthetic-$(cancer_categories[cancer])$(misspecification_type[misspec]).tsv", DataFrame; delim='\t')
+      X = Matrix{Int}(count_dataframe[:, 2:end])
       println("cancer: $(cancer)\tmisspec: $(misspec)\tK: $(K)")
       hp = hyperpriors[:, "$(cancer)-$(misspec)"]
-      stan_data = (; I=size(X, 1), J=size(X, 2), K, X, alpha=1.0, gamma0=2.0, gamma1=4.0, delta0=hp[1], delta1=hp[2])
+      data = (; I=size(X, 1), J=size(X, 2), K, X, alpha=1.0, gamma0=2.0, gamma1=4.0, delta0=hp[1], delta1=hp[2])
+      init = (; theta=H, r=collect(eachcol(W)))
       model = SampleModel("model-$(cancer)-$(misspec)-$(K)", stan_program)
 
-      _ = stan_sample(model; data=stan_data, num_chains=16, num_samples=1000, num_warmups=4000, delta=0.98, max_depth=12, show_logging=true)
+      _ = stan_sample(model; data=data, init=init, num_chains=16, num_samples=1000, num_warmups=4000, delta=0.98, max_depth=12, show_logging=true)
       result = read_samples(model, :dataframe)
       jldsave("../raw-cache-stan/synthetic/cache-stan-$(cancer_categories[cancer])$(misspecification_type[misspec])-$(K).jld2"; result)
     end
