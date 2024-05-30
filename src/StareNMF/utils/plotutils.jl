@@ -252,7 +252,7 @@ function BIC(X, nmf_result::NMF.Result{T}; model=(mu, sigma) -> Normal(mu, sigma
   K, N = size(nmf_result.H)
   WH = nmf_result.W * nmf_result.H
   lpdf = logpdf.(model.(WH, modelargs...), X)
-  return K * log(N) - 2sum(lpdf)
+  return K * log(N) - 2sum(lpdf) + 2log(factorial(K))
 end
 
 

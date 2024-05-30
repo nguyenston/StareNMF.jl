@@ -261,7 +261,7 @@ function generate_plots_hyprunmix(; cache_name="nys=20-multiplier=1", dataset="u
 
   data = CSV.read("../hyperspectral-unmixing-datasets/$(dataset)/data.csv", DataFrame)
   X = Matrix{Int}(data) / 1000
-  N = size(X, 2)
+  D, N = size(X)
 
   println("start looping...")
   w_metric = (w, w_gt) -> 1 - (normalize(w)' * normalize(w_gt)) |> (x -> isnan(x) ? 1.0 : x)
@@ -309,11 +309,11 @@ function generate_plots_hyprunmix(; cache_name="nys=20-multiplier=1", dataset="u
       weighting_function=(wdiff, hdiff) -> wdiff
     )
 
-    modelargs = [norm(r.W * r.H - X) / sqrt(N) for r in results[1:6]] .|> x -> (x,)
+    modelargs = [norm(r.W * r.H - X) / sqrt(D * N) for r in results[1:6]] .|> x -> (x,)
     model = (m, s) -> Normal(m, s)
     # modelargs = ()
     # model = x -> Poisson(x)
-    bic = BIC.([X], results[1:6]; model, modelargs)
+    bic = [BIC(X, results[k]; model=model, modelargs=modelargs[k]) for k in 1:6]
     lines!(ax1, 1.5:length(valid_results)+0.5, bic; label="BIC")
     lines!(ax2, 1.5:length(valid_results)+0.5, [mm[2] for mm in mrl_maxes]; label="max difference", color=:orange)
     linkxaxes!(ax_bubs, ax1, ax2)
@@ -340,12 +340,13 @@ function generate_plots_synthetic(; cache_name="nys=20-multiplier=200", nmf_algs
   signatures_unsorted = CSV.read("../synthetic-data-2023/alexandrov2015_signatures.tsv", DataFrame; delim='\t')
   signatures = sort(signatures_unsorted)
   cancer_categories = Dict(
-    "skin" => "107-skin-melanoma-all-seed-1",
-    "ovary" => "113-ovary-adenoca-all-seed-1",
+    # "skin" => "107-skin-melanoma-all-seed-1",
+    # "ovary" => "113-ovary-adenoca-all-seed-1",
     "breast" => "214-breast-all-seed-1",
-    "liver" => "326-liver-hcc-all-seed-1",
-    "lung" => "38-lung-adenoca-all-seed-1",
-    "stomach" => "75-stomach-adenoca-all-seed-1")
+    # "liver" => "326-liver-hcc-all-seed-1",
+    # "lung" => "38-lung-adenoca-all-seed-1",
+    # "stomach" => "75-stomach-adenoca-all-seed-1"
+  )
   misspecification_type = Dict(
     "none" => "",
     "contaminated" => "-contamination-2",
@@ -478,7 +479,7 @@ end
 # cache_result_synthetic(; nmf_algs=["bssmf"])
 # cache_result_real(; nmf_algs=["bssmf"])
 # generate_plots_real(; cache_name="nys=20-multiplier=200", nmf_algs=["alspgrad"])
-# generate_plots_synthetic(; cache_name="nys=20-multiplier=200", nmf_algs=["alspgrad"])
+# generate_plots_synthetic(; cache_name="stan-nys=20-multiplier=200", nmf_algs=["stan"])
 # generate_rho_performance_plots_synthetic(; cache_name="nys=20-multiplier=200", nmf_algs=["alspgrad"])
-generate_plots_hyprunmix(; cache_name="nys=15-multiplier=1", nmf_algs=["greedycd"], rhos=0:0.1:80, filenameappend="lambdaw=0.5-lambdah=1.5")
+generate_plots_hyprunmix(; cache_name="nys=15-multiplier=1", nmf_algs=["greedycd"], rhos=0:0.1:80, filenameappend="-lambdaw=0.5-lambdah=1.5")
 # cache_result_hyprunmix(; overwrite=true, nmf_algs=["multdiv"], nmfargs=(; replicates=16, ncpu=16))
