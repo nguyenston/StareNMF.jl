@@ -109,9 +109,9 @@ function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200,
   )
   misspecification_type = Dict(
     "none" => "",
-    # "contaminated" => "-contamination-2",
-    # "overdispersed" => "-overdispersed-2.0",
-    # "perturbed" => "-perturbed-0.0025"
+    "contaminated" => "-contamination-2",
+    "overdispersed" => "-overdispersed-2.0",
+    "perturbed" => "-perturbed-0.0025"
   )
   cache_name_prepend, rgen = result_generation
   cache_name = "$(cache_name_prepend)nys=$(nysamples)-multiplier=$(multiplier)"
@@ -194,12 +194,13 @@ function generate_rho_performance_plots_synthetic(; cache_name="nys=20-multiplie
   signatures_unsorted = CSV.read("../synthetic-data-2023/alexandrov2015_signatures.tsv", DataFrame; delim='\t')
   signatures = sort(signatures_unsorted)
   cancer_categories = Dict(
-    "skin" => "107-skin-melanoma-all-seed-1",
-    "ovary" => "113-ovary-adenoca-all-seed-1",
-    "breast" => "214-breast-all-seed-1",
-    "liver" => "326-liver-hcc-all-seed-1",
+    # "skin" => "107-skin-melanoma-all-seed-1",
+    # "ovary" => "113-ovary-adenoca-all-seed-1",
+    # "breast" => "214-breast-all-seed-1",
+    # "liver" => "326-liver-hcc-all-seed-1",
     "lung" => "38-lung-adenoca-all-seed-1",
-    "stomach" => "75-stomach-adenoca-all-seed-1")
+    # "stomach" => "75-stomach-adenoca-all-seed-1"
+  )
   misspecification_type = Dict(
     "none" => "",
     "contaminated" => "-contamination-2",
@@ -421,9 +422,10 @@ function generate_plots_real(; cache_name="nys=20-multiplier=200", nmf_algs=["mu
     "liver" => "Liver-HCC",
     "lung" => "Lung-SCC",
     "stomach" => "Stomach-AdenoCA")
+  artifacts = "SBS" .* ["27", "43", "45", "46", "47", "48", "49", "50", "51", "52", "53", "54", "55", "56", "57", "58", "59", "60", "95"]
 
-  sig_names = names(signatures)[3:end]
-  loadings = DataFrame(loadings=fill(2000, length(sig_names)), signatures=sig_names)
+  sig_names = filter(x -> !in(x, artifacts), names(signatures)[3:end])
+  loadings = DataFrame(loadings=[1000 + i for i in 1:length(sig_names)], signatures=sig_names)
   nloadings = nrow(loadings)
 
   println("start looping...")
@@ -478,8 +480,9 @@ end
 
 # cache_result_synthetic(; nmf_algs=["bssmf"])
 # cache_result_real(; nmf_algs=["bssmf"])
-# generate_plots_real(; cache_name="nys=20-multiplier=200", nmf_algs=["alspgrad"])
+# generate_plots_real(; cache_name="nys=20-multiplier=200", nmf_algs=["multdiv", "greedycd", "bssmf", "alspgrad"])
+# generate_plots_real(; cache_name="musicatk-nys=20-multiplier=200", nmf_algs=["nmf", "lda", "nsnmf"])
 # generate_plots_synthetic(; cache_name="stan-nys=20-multiplier=200", nmf_algs=["stan"])
-# generate_rho_performance_plots_synthetic(; cache_name="nys=20-multiplier=200", nmf_algs=["alspgrad"])
-generate_plots_hyprunmix(; cache_name="nys=15-multiplier=1", nmf_algs=["greedycd"], rhos=0:0.1:80, filenameappend="-lambdaw=0.5-lambdah=1.5")
+generate_rho_performance_plots_synthetic(; cache_name="stan-nys=20-multiplier=200", nmf_algs=["stan"])
+# generate_plots_hyprunmix(; cache_name="nys=15-multiplier=1", nmf_algs=["greedycd"], rhos=0:0.1:80, filenameappend="-lambdaw=0.5-lambdah=1.5")
 # cache_result_hyprunmix(; overwrite=true, nmf_algs=["multdiv"], nmfargs=(; replicates=16, ncpu=16))
