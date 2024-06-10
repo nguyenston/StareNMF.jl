@@ -51,7 +51,7 @@ function cache_result_hyprunmix(; overwrite=false, nysamples=15, multiplier=1,
   end
 end
 
-const default_result_generation = (;
+const default_result_generation_synthetic = (;
   cache_name_prepend="",
   rgen=(cancer, misspec, X, ks, nmf_alg, nmfargs) -> begin
     results = rank_determination(X, ks;
@@ -59,7 +59,7 @@ const default_result_generation = (;
     return results
   end
 )
-const R_result_generation = (;
+const R_result_generation_synthetic = (;
   cache_name_prepend="musicatk-",
   rgen=(cancer, misspec, _, ks, nmf_alg, _) -> begin
     Ws = [CSV.read("../raw-cache-R/synthetic/$(nmf_alg)/$(cancer)-$(misspec)$(k)-W.csv", DataFrame)[:, 2:end] for k in ks] .|> Matrix
@@ -68,7 +68,7 @@ const R_result_generation = (;
     return results
   end
 )
-const stan_result_generation = (;
+const stan_result_generation_synthetic = (;
   cache_name_prepend="stan-",
   rgen=(cancer, misspec, X, ks, _, _) -> begin
     cancer_categories = Dict(
@@ -97,14 +97,14 @@ const stan_result_generation = (;
     return results
   end
 )
-function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200, result_generation=default_result_generation, nmfargs=(), nmf_algs=[])
+function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200, result_generation=default_result_generation_synthetic, nmfargs=(), nmf_algs=[])
   println("program start...")
   cancer_categories = Dict(
     # "skin" => "107-skin-melanoma-all-seed-1",
     # "ovary" => "113-ovary-adenoca-all-seed-1",
     "breast" => "214-breast-all-seed-1",
     # "liver" => "326-liver-hcc-all-seed-1",
-    # "lung" => "38-lung-adenoca-all-seed-1",
+    "lung" => "38-lung-adenoca-all-seed-1",
     # "stomach" => "75-stomach-adenoca-all-seed-1"
   )
   misspecification_type = Dict(
@@ -144,7 +144,55 @@ function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200,
   end
 end
 
-function cache_result_real(; overwrite=false, nysamples=20, multiplier=200, r_mode=false, ks=1:21, nmfargs=(), nmf_algs=[])
+const default_result_generation_real = (;
+  cache_name_prepend="",
+  rgen=(cancer, X, ks, nmf_alg, nmfargs) -> begin
+    results = rank_determination(X, ks;
+      nmfargs=(; alg=Symbol(nmf_alg), replicates=16, ncpu=16, maxiter=400000, simplex_W=true, nmfargs...))
+    return results
+  end
+)
+const R_result_generation_real = (;
+  cache_name_prepend="musicatk-",
+  rgen=(cancer, _, ks, nmf_alg, _) -> begin
+    cancer_categories = Dict(
+      "skin" => "Skin-Melanoma",
+      "ovary" => "Ovary-AdenoCA",
+      "breast" => "Breast",
+      "liver" => "Liver-HCC",
+      "lung" => "Lung-SCC",
+      "stomach" => "Stomach-AdenoCA")
+    Ws = [CSV.read("../raw-cache-R/real/$(nmf_alg)/$(cancer_categories[cancer])$(k)-W.csv", DataFrame)[:, 2:end] for k in ks] .|> Matrix
+    Hs = [CSV.read("../raw-cache-R/real/$(nmf_alg)/$(cancer_categories[cancer])$(k)-H.csv", DataFrame)[:, 2:end] for k in ks] .|> Matrix{Float64}
+    results = NMF.Result{Float64}.(Ws, Hs, 0, true, 0)
+    return results
+  end
+)
+const stan_result_generation_real = (;
+  cache_name_prepend="stan-",
+  rgen=(cancer, X, ks, _, _) -> begin
+    cancer_categories = Dict(
+      "skin" => "Skin-Melanoma",
+      "ovary" => "Ovary-AdenoCA",
+      "breast" => "Breast",
+      "liver" => "Liver-HCC",
+      "lung" => "Lung-SCC",
+      "stomach" => "Stomach-AdenoCA")
+    D, N = size(X)
+
+    chain_to_result = K -> begin
+      chain = load("../raw-cache-stan/synthetic/cache-stan-$(cancer_categories[cancer])-$(K).jld2")["result"]
+      numsamples = nrow(chain)
+      H = Iterators.product(1:K, 1:N) .|> ((k, n),) -> sum(chain[!, "theta.$(k).$(n)"]) / numsamples
+      W = Iterators.product(1:D, 1:K) .|> ((d, k),) -> sum(chain[!, "r.$(k).$(d)"]) / numsamples
+      return NMF.Result{Float64}(W, H, 0, true, 0)
+    end
+
+    results = chain_to_result.(ks)
+    return results
+  end
+)
+function cache_result_real(; overwrite=false, nysamples=20, multiplier=200, result_generation=default_result_generation_real, ks=1:21, nmfargs=(), nmf_algs=[])
   println("program start...")
   cancer_categories = Dict(
     "skin" => "Skin-Melanoma",
@@ -153,7 +201,8 @@ function cache_result_real(; overwrite=false, nysamples=20, multiplier=200, r_mo
     "liver" => "Liver-HCC",
     "lung" => "Lung-SCC",
     "stomach" => "Stomach-AdenoCA")
-  cache_name = r_mode ? "musicatk-nys=$(nysamples)-multiplier=$(multiplier)" : "nys=$(nysamples)-multiplier=$(multiplier)"
+  cache_name_prepend, rgen = result_generation
+  cache_name = "$(cache_name_prepend)nys=$(nysamples)-multiplier=$(multiplier)"
   nmf_algs = nmf_algs
 
   println("start looping...")
@@ -170,14 +219,7 @@ function cache_result_real(; overwrite=false, nysamples=20, multiplier=200, r_mo
     data = CSV.read("../WGS_PCAWG.96.ready/$(cancer_categories[cancer]).tsv", DataFrame; delim='\t')
     X = Matrix(data[:, 2:end])
 
-    if r_mode
-      Ws = [CSV.read("../raw-cache-R/real/$(nmf_alg)/$(cancer_categories[cancer])$(k)-W.csv", DataFrame)[:, 2:end] for k in ks] .|> Matrix
-      Hs = [CSV.read("../raw-cache-R/real/$(nmf_alg)/$(cancer_categories[cancer])$(k)-H.csv", DataFrame)[:, 2:end] for k in ks] .|> Matrix{Float64}
-      results = NMF.Result{Float64}.(Ws, Hs, 0, true, 0)
-    else
-      results = rank_determination(X, ks;
-        nmfargs=(; alg=Symbol(nmf_alg), replicates=16, ncpu=16, maxiter=400000, simplex_W=true, nmfargs...))
-    end
+    results = rgen(cancer, X, ks, nmf_alg, nmfargs)
 
     # compute componentwise losses
     componentwise_losses = Vector{Vector{Float64}}(undef, length(results))
@@ -196,7 +238,7 @@ function generate_rho_performance_plots_synthetic(; cache_name="nys=20-multiplie
   cancer_categories = Dict(
     # "skin" => "107-skin-melanoma-all-seed-1",
     # "ovary" => "113-ovary-adenoca-all-seed-1",
-    # "breast" => "214-breast-all-seed-1",
+    "breast" => "214-breast-all-seed-1",
     # "liver" => "326-liver-hcc-all-seed-1",
     "lung" => "38-lung-adenoca-all-seed-1",
     # "stomach" => "75-stomach-adenoca-all-seed-1"
@@ -345,7 +387,7 @@ function generate_plots_synthetic(; cache_name="nys=20-multiplier=200", nmf_algs
     # "ovary" => "113-ovary-adenoca-all-seed-1",
     "breast" => "214-breast-all-seed-1",
     # "liver" => "326-liver-hcc-all-seed-1",
-    # "lung" => "38-lung-adenoca-all-seed-1",
+    "lung" => "38-lung-adenoca-all-seed-1",
     # "stomach" => "75-stomach-adenoca-all-seed-1"
   )
   misspecification_type = Dict(
@@ -364,8 +406,8 @@ function generate_plots_synthetic(; cache_name="nys=20-multiplier=200", nmf_algs
     for misspec in keys(misspecification_type)
       println("alg: $(nmf_alg)\tcancer: $(cancer)\tmisspec: $(misspec)")
       # jldsave("../result-cache/rho-k-$(cancer_categories[cancer])$(misspecification_type[misspec]).jld2"; rhos, ks, losses, results)
-      # data = CSV.read("../synthetic-data-2023/synthetic-$(cancer_categories[cancer])$(misspecification_type[misspec]).tsv", DataFrame; delim='\t')
-      # X = Matrix(data[:, 2:end])
+      data = CSV.read("../synthetic-data-2023/synthetic-$(cancer_categories[cancer])$(misspecification_type[misspec]).tsv", DataFrame; delim='\t')
+      X = Matrix(data[:, 2:end])
 
       file = load("../result-cache-synthetic/$(cache_name)/cache-$(nmf_alg)-$(cancer_categories[cancer])$(misspecification_type[misspec]).jld2")
       results = [r for r in file["results"]]
@@ -384,21 +426,33 @@ function generate_plots_synthetic(; cache_name="nys=20-multiplier=200", nmf_algs
       bubs_legend_and_colorbar[1:2, 1] = subfig_bubs.content[2].content.content .|> x -> x.content
 
 
-      ax1 = Axis(fig; yscale=log10, xticks=(1.5:length(valid_results)+0.5, ["K = $(i)" for i in 1:length(valid_results)]))
+      ax1 = Axis(fig; yscale=log10, xticks=(1.5:length(valid_results)+0.5, ["K = $(i)" for i in 1:length(valid_results)]),
+        yaxisposition=:right, ytickcolor=:blue, yticklabelcolor=:blue)
       ax2 = Axis(fig; yscale=identity, limits=(nothing, (0, nothing)),
-        xticks=(1.5:length(valid_results)+0.5, ["K = $(i)" for i in 1:length(valid_results)]))
+        xticks=(1.5:length(valid_results)+0.5, ["K = $(i)" for i in 1:length(valid_results)]),
+        ytickcolor=:orange, yticklabelcolor=:orange)
+      ax3 = Axis(fig; yscale=identity, xticks=(1.5:length(valid_results)+0.5, ["K = $(i)" for i in 1:length(valid_results)]),
+        yticks=0:length(valid_results))
 
       mrl_maxes = compare_against_gt.([loadings], [signatures], valid_results; weighting_function=(cd, ld) -> cd + tanh(0.1ld))
-      lines!(ax1, 1.5:length(valid_results)+0.5, [mm[1] for mm in mrl_maxes]; label="max relative loading difference")
-      lines!(ax2, 1.5:length(valid_results)+0.5, [mm[2] for mm in mrl_maxes]; label="max difference", color=:orange)
+      plt1 = lines!(ax1, 1.5:length(valid_results)+0.5, [mm[1] for mm in mrl_maxes]; color=:blue)
+      plt2 = lines!(ax2, 1.5:length(valid_results)+0.5, [mm[2] for mm in mrl_maxes]; color=:orange)
+
+      modelargs = ()
+      model = x -> Poisson(x)
+      bic = [BIC(X, results[k]; model, modelargs) for k in 1:length(valid_results)]
+      bic_order = sortperm(bic) |> invperm
+      plt3 = lines!(ax3, 1.5:length(valid_results)+0.5, bic_order; color=:red)
+
       linkxaxes!(ax_bubs, ax1, ax2)
       subfig_bubs[1, 1] = ax1
-      subfig_bubs[2, 1] = ax2
+      subfig_bubs[1, 1] = ax2
+      subfig_bubs[2, 1] = ax3
       subfig_bubs[3, 1] = ax_bubs
 
 
-      subfig_bubs[1, 2] = Legend(fig, ax1)
-      subfig_bubs[2, 2] = Legend(fig, ax2)
+      subfig_bubs[1, 2] = Legend(fig, [plt1, plt2], ["max relative loading difference", "max cosine difference"])
+      subfig_bubs[2, 2] = Legend(fig, [plt3], ["BIC Order"])
       subfig_bubs[3, 2] = bubs_legend_and_colorbar
 
       rowsize!(subfig_bubs, 3, Relative(1 // 2))
@@ -478,11 +532,12 @@ function generate_plots_real(; cache_name="nys=20-multiplier=200", nmf_algs=["mu
   end
 end
 
-# cache_result_synthetic(; nmf_algs=["bssmf"])
+# cache_result_synthetic(; result_generation=stan_result_generation_synthetic,  nmf_algs=["stan"])
 # cache_result_real(; nmf_algs=["bssmf"])
+cache_result_real(; result_generation=stan_result_generation_real, nmf_algs=["stan"])
 # generate_plots_real(; cache_name="nys=20-multiplier=200", nmf_algs=["multdiv", "greedycd", "bssmf", "alspgrad"])
 # generate_plots_real(; cache_name="musicatk-nys=20-multiplier=200", nmf_algs=["nmf", "lda", "nsnmf"])
 # generate_plots_synthetic(; cache_name="stan-nys=20-multiplier=200", nmf_algs=["stan"])
-generate_rho_performance_plots_synthetic(; cache_name="stan-nys=20-multiplier=200", nmf_algs=["stan"])
+# generate_rho_performance_plots_synthetic(; cache_name="stan-nys=20-multiplier=200", nmf_algs=["stan"])
 # generate_plots_hyprunmix(; cache_name="nys=15-multiplier=1", nmf_algs=["greedycd"], rhos=0:0.1:80, filenameappend="-lambdaw=0.5-lambdah=1.5")
 # cache_result_hyprunmix(; overwrite=true, nmf_algs=["multdiv"], nmfargs=(; replicates=16, ncpu=16))
