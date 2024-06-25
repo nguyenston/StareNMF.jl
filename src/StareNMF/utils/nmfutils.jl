@@ -1,5 +1,79 @@
 using NMF
 using BSSMF
+using Printf
+
+function nmf_skeleton!(updater::NMF.NMFUpdater{T},
+  X, W::Matrix{T}, H::Matrix{T},
+  maxiter::Int, verbose::Bool, tol, simplex_H) where {T}
+  objv = convert(T, NaN)
+
+  # init
+  state = NMF.prepare_state(updater, X, W, H)
+  preW = Matrix{T}(undef, size(W))
+  preH = Matrix{T}(undef, size(H))
+  if verbose
+    start = time()
+    objv = NMF.evaluate_objv(updater, state, X, W, H)
+    @printf("%-5s    %-13s    %-13s    %-13s    %-13s\n", "Iter", "Elapsed time", "objv", "objv.change", "(W & H).change")
+    @printf("%5d    %13.6e    %13.6e\n", 0, 0.0, objv)
+  end
+
+  # main loop
+  converged = false
+  t = 0
+  while !converged && t < maxiter
+    t += 1
+    copyto!(preW, W)
+    copyto!(preH, H)
+
+    # update H
+    NMF.update_wh!(updater, state, X, W, H)
+    if simplex_H
+      BSSMF.condatProj!(H)
+    end
+
+    # determine convergence
+    converged = stop_condition(W, preW, H, preH, tol)
+
+    # display info
+    if verbose
+      elapsed = time() - start
+      preobjv = objv
+      objv = NMF.evaluate_objv(updater, state, X, W, H)
+      @printf("%5d    %13.6e    %13.6e    %13.6e\n",
+        t, elapsed, objv, objv - preobjv)
+    end
+  end
+
+  if !verbose
+    objv = NMF.evaluate_objv(updater, state, X, W, H)
+  end
+  return NMF.Result{T}(W, H, t, converged, objv)
+end
+
+function stop_condition(W::AbstractArray{T}, preW::AbstractArray, H::AbstractArray, preH::AbstractArray, eps::AbstractFloat) where {T}
+  for j in axes(W, 2)
+    dev_w = sum_w = zero(T)
+    for i in axes(W, 1)
+      dev_w += (W[i, j] - preW[i, j])^2
+      sum_w += (W[i, j] + preW[i, j])^2
+    end
+    dev_h = sum_h = zero(T)
+    for i in axes(H, 2)
+      dev_h += (H[j, i] - preH[j, i])^2
+      sum_h += (H[j, i] + preH[j, i])^2
+    end
+    if sqrt(dev_w) > eps * sqrt(sum_w) || sqrt(dev_h) > eps * sqrt(sum_h)
+      return false
+    end
+  end
+  return true
+end
+
+custom_solve!(alg::NMF.GreedyCD{T}, X, W, H, simplex_H=false) where {T} =
+  nmf_skeleton!(NMF.GreedyCDUpd{T}(alg.update_H, alg.lambda_w, alg.lambda_h), X, W, H, alg.maxiter, alg.verbose, alg.tol, simplex_H)
+
+# custom_solve!(alg, X, W, H, _) = NMF.solve!(alg, X, W, H)
 
 function run_nmf(X::AbstractMatrix{T}, k::Integer;
   init::Symbol=:nndsvdar,
@@ -10,6 +84,7 @@ function run_nmf(X::AbstractMatrix{T}, k::Integer;
   W0::Union{AbstractMatrix{T},Nothing}=nothing,
   H0::Union{AbstractMatrix{T},Nothing}=nothing,
   update_H::Bool=true,
+  simplex_H::Bool=false,
   verbose::Bool=false,
   kwargs...) where {T}
   eltype(X) <: Number && all(t -> t >= zero(T), X) || throw(ArgumentError("The elements of X must be non-negative."))
@@ -74,7 +149,7 @@ function run_nmf(X::AbstractMatrix{T}, k::Integer;
   else
     throw(ArgumentError("Invalid algorithm."))
   end
-  return NMF.solve!(alginst, X, W, H)
+  return custom_solve!(alginst, X, W, H, simplex_H)
 end
 
 """
