@@ -21,6 +21,10 @@ function nmf_skeleton!(updater::NMF.NMFUpdater{T},
   # main loop
   converged = false
   t = 0
+  if simplex_H
+    BSSMF.condatProj!(H)
+  end
+
   while !converged && t < maxiter
     t += 1
     copyto!(preW, W)
