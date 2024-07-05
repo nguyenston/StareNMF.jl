@@ -90,13 +90,18 @@ end
 """
 TODO: add documentation
 """
-function rho_k_losses(gridpos, componentwise_losses, rhos; lambda=0.01, plot_title="")
+function rho_k_losses(gridpos, componentwise_losses, rhos; lambda=0.01, plot_title="", rho_choice=Nothing)
   subfig = GridLayout()
   ax = Axis(gridpos; yscale=log10, title=plot_title)
   for cwl in componentwise_losses
     K = length(cwl)
     stare_loss = [sum(max.(0, cwl .- rh)) + lambda * K for rh in rhos]
     lines!(ax, rhos, stare_loss, label="K=$(K)", cycle=[:color, :linestyle])
+  end
+
+  if rho_choice != Nothing
+    stare_losses = [sum(max.(0, cwl .- rho_choice)) + lambda * length(cwl) for cwl in componentwise_losses]
+    scatter!(ax, [rho_choice], [minimum(stare_losses)]; marker=:xcross, color=:black)
   end
 
   subfig[1, 1] = ax
@@ -145,11 +150,13 @@ end
 
 """
 TODO: add documentation
+TODO: finish implementing K > n_gt_sig cases
 """
 function bubbles(gridpos, gt_loadings::DataFrame, gt_signatures::DataFrame, nmf_results::Vector{NMF.Result{T}};
   weighting_function=(wdiff, hdiff) -> wdiff + tanh(0.2hdiff),
   w_metric=(w, w_gt) -> 1 - (normalize(w)' * normalize(w_gt)),
-  h_metric=(h, h_gt) -> abs(h - h_gt) / h_gt) where {T<:Number}
+  h_metric=(h, h_gt) -> abs(h - h_gt) / h_gt,
+  simplex_W=false) where {T<:Number}
 
   subfig = GridLayout()
 
@@ -159,14 +166,16 @@ function bubbles(gridpos, gt_loadings::DataFrame, gt_signatures::DataFrame, nmf_
 
   GT_sig = sorted_loadings[:, 2]
   GT_sig_loadings = sorted_loadings[:, 1]
-  valid_results = filter(nmf_results) do r
-    size(r.H)[1] <= n_gt_sig
-  end
 
-  ax = Axis(gridpos; limits=((0, n_gt_sig + 1), (0, n_gt_sig + 1)), yticks=(1:n_gt_sig, GT_sig),
-    xticks=(0.5:length(valid_results)+1, ["GT"; ["K = $(size(r.H)[1])" for r in valid_results]]))
+  # if maxK is larger than the number of ground truth signatures, add padding to labels
+  max_n_sig = max(n_gt_sig, maximum(r -> size(r.H, 1), nmf_results))
+  ytick_padding = fill("", max_n_sig - n_gt_sig)
 
-  max_inferred_loading = maximum([maximum(sum(Diagonal(norm.(eachcol(r.W), 1)) * r.H; dims=2)) / size(r.H)[2] for r in valid_results])
+  ax = Axis(gridpos; limits=((0, max_n_sig + 1), (0, max_n_sig + 1)), yticks=(1:max_n_sig, [GT_sig; ytick_padding]),
+    xticks=(0.5:length(nmf_results)+1, ["GT"; ["K = $(size(r.H)[1])" for r in nmf_results]]))
+
+  conditioned_W_L1 = W -> simplex_W ? Diagonal(norm.(eachcol(W), 1)) : Diagonal(fill(1, size(W, 2)))
+  max_inferred_loading = maximum([maximum(sum(conditioned_W_L1(r.W) * r.H; dims=2)) / size(r.H)[2] for r in nmf_results])
   max_radius = round(max(maximum(GT_sig_loadings), max_inferred_loading); sigdigits=2)
 
   strokewidth = 1
@@ -181,15 +190,15 @@ function bubbles(gridpos, gt_loadings::DataFrame, gt_signatures::DataFrame, nmf_
 
   scatter!(ax, points; markersize=radius.(GT_sig_loadings), color=fill(0, n_gt_sig),
     colorrange, highclip, colormap, strokewidth)
-  lines!(ax, [1, 1], [0, n_gt_sig + 1]; linewidth=3)
+  lines!(ax, [1, 1], [0, max_n_sig + 1]; linewidth=3)
 
-  for (r_idx, r) in enumerate(valid_results)
+  for (r_idx, r) in enumerate(nmf_results)
     W = r.W
     H = r.H
     K, N = size(H)
 
     # Matrix W as a dataframe with each column being a signature
-    W_L1 = Diagonal(norm.(eachcol(W), 1))
+    W_L1 = conditioned_W_L1(W)
     avg_inferred_loadings = dropdims(sum(W_L1 * H; dims=2); dims=2) / N
 
     w_diffs = Iterators.product(eachcol(W), eachcol(relevant_signatures)) .|> x -> w_metric(x...)
@@ -197,9 +206,18 @@ function bubbles(gridpos, gt_loadings::DataFrame, gt_signatures::DataFrame, nmf_
     combined_diffs = weighting_function.(w_diffs, h_diffs)
     assignment, _ = hungarian(combined_diffs)
 
+    # assigning location for unmatched signatures
+    unmatched_assignment = n_gt_sig + 1
+    for i in eachindex(assignment)
+      if assignment[i] == 0
+        assignment[i] = unmatched_assignment
+        unmatched_assignment += 1
+      end
+    end
+
     points = Point2f.(r_idx + 0.5, assignment)
     scatter!(ax, points; colorrange, colormap, strokewidth, highclip,
-      markersize=radius.(avg_inferred_loadings), color=[w_diffs[i, assignment[i]] for i in 1:K])
+      markersize=radius.(avg_inferred_loadings), color=[assignment[i] <= n_gt_sig ? w_diffs[i, assignment[i]] : 1.0 for i in 1:K])
   end
   legend = Legend(gridpos, group_size, string.(legendradiuses), "Mean Loading";
     tellheight=true, patchsize=(35, 35))
