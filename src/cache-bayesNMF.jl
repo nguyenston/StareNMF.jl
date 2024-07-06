@@ -15,7 +15,7 @@ function synthetic(K; overwrite=false)
     # "liver" => "326-liver-hcc-all-seed-1",
     # "lung" => "38-lung-adenoca-all-seed-1",
     # "stomach" => "75-stomach-adenoca-all-seed-1"
-    "breast-custom" => "450-breast-custom",
+    "breast_custom" => "450-breast-custom",
   )
   misspecification_type = Dict(
     "none" => "",
