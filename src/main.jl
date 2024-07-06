@@ -106,7 +106,7 @@ function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200,
     # "liver" => "326-liver-hcc-all-seed-1",
     # "lung" => "38-lung-adenoca-all-seed-1",
     # "stomach" => "75-stomach-adenoca-all-seed-1"
-    "breast-custom" => "450-breast-custom",
+    "breast_custom" => "450-breast-custom",
   )
   misspecification_type = Dict(
     "none" => "",
@@ -243,7 +243,7 @@ function generate_rho_performance_plots_synthetic(; cache_name="nys=20-multiplie
     # "liver" => "326-liver-hcc-all-seed-1",
     # "lung" => "38-lung-adenoca-all-seed-1",
     # "stomach" => "75-stomach-adenoca-all-seed-1"
-    "breast-custom" => "450-breast-custom",
+    "breast_custom" => "450-breast-custom",
   )
   misspecification_type = Dict(
     "none" => "",
@@ -397,7 +397,7 @@ function generate_plots_synthetic(; cache_name="nys=20-multiplier=200", nmf_algs
     # "liver" => "326-liver-hcc-all-seed-1",
     # "lung" => "38-lung-adenoca-all-seed-1",
     # "stomach" => "75-stomach-adenoca-all-seed-1"
-    "breast-custom" => "450-breast-custom",
+    "breast_custom" => "450-breast-custom",
   )
   misspecification_type = Dict(
     "none" => "",
