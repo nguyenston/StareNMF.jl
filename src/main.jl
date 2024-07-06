@@ -102,16 +102,17 @@ function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200,
   cancer_categories = Dict(
     # "skin" => "107-skin-melanoma-all-seed-1",
     # "ovary" => "113-ovary-adenoca-all-seed-1",
-    "breast" => "214-breast-all-seed-1",
+    # "breast" => "214-breast-all-seed-1",
     # "liver" => "326-liver-hcc-all-seed-1",
-    "lung" => "38-lung-adenoca-all-seed-1",
+    # "lung" => "38-lung-adenoca-all-seed-1",
     # "stomach" => "75-stomach-adenoca-all-seed-1"
+    "breast-custom" => "450-breast-custom",
   )
   misspecification_type = Dict(
     "none" => "",
-    "contaminated" => "-contamination-2",
-    "overdispersed" => "-overdispersed-2.0",
-    "perturbed" => "-perturbed-0.0025"
+    # "contaminated" => "-contamination-2",
+    # "overdispersed" => "-overdispersed-2.0",
+    # "perturbed" => "-perturbed-0.0025"
   )
   cache_name_prepend, rgen = result_generation
   cache_name = "$(cache_name_prepend)nys=$(nysamples)-multiplier=$(multiplier)"
@@ -181,7 +182,7 @@ const stan_result_generation_real = (;
     D, N = size(X)
 
     chain_to_result = K -> begin
-      chain = load("../raw-cache-stan/synthetic/cache-stan-$(cancer_categories[cancer])-$(K).jld2")["result"]
+      chain = load("../raw-cache-stan/real/cache-stan-$(cancer_categories[cancer])-$(K).jld2")["result"]
       numsamples = nrow(chain)
       H = Iterators.product(1:K, 1:N) .|> ((k, n),) -> sum(chain[!, "theta.$(k).$(n)"]) / numsamples
       W = Iterators.product(1:D, 1:K) .|> ((d, k),) -> sum(chain[!, "r.$(k).$(d)"]) / numsamples
@@ -238,10 +239,11 @@ function generate_rho_performance_plots_synthetic(; cache_name="nys=20-multiplie
   cancer_categories = Dict(
     # "skin" => "107-skin-melanoma-all-seed-1",
     # "ovary" => "113-ovary-adenoca-all-seed-1",
-    "breast" => "214-breast-all-seed-1",
+    # "breast" => "214-breast-all-seed-1",
     # "liver" => "326-liver-hcc-all-seed-1",
-    "lung" => "38-lung-adenoca-all-seed-1",
+    # "lung" => "38-lung-adenoca-all-seed-1",
     # "stomach" => "75-stomach-adenoca-all-seed-1"
+    "breast-custom" => "450-breast-custom",
   )
   misspecification_type = Dict(
     "none" => "",
@@ -253,7 +255,7 @@ function generate_rho_performance_plots_synthetic(; cache_name="nys=20-multiplie
   for nmf_alg in nmf_algs
     fig = Figure(size=(1500, 1000))
     ax = Axis(fig[1, 1])
-    rhos = collect(0:0.1:60)
+    rhos = collect(0:0.1:5)
     avg_performance = zeros(length(rhos))
     Base.Filesystem.mkpath("../plots/synthetic/$(cache_name)/rho-performances-$(nmf_alg)/")
     for cancer in keys(cancer_categories)
@@ -275,7 +277,8 @@ function generate_rho_performance_plots_synthetic(; cache_name="nys=20-multiplie
         results = [r for r in file["results"]]
         componentwise_losses = file["componentwise_losses"]
 
-        rho_performance = rho_performance_factory(loadings, signatures, results, componentwise_losses; weighting_function=(cd, ld) -> cd + tanh(0.1ld))
+        rho_performance = rho_performance_factory(loadings, signatures, results, componentwise_losses;
+          weighting_function=(wdiff, hdiff) -> wdiff + tanh(0.1hdiff))
         perf = rho_performance.(rhos)
         avg_performance .+= perf
         local_avg_performance .+= perf
@@ -324,15 +327,14 @@ function generate_plots_hyprunmix(; cache_name="nys=20-multiplier=1", dataset="u
     valid_results = filter(results) do r
       size(r.H)[1] <= nloadings
     end
-    fig = Figure(size=(3200, 3200))
+    fig = Figure(size=(1600, 2400))
 
-    rho_k_losses(fig[1, 2][1, 1], componentwise_losses, rhos)
-    rho_k_bottom(fig[1, 2][2, 1], componentwise_losses)
+    rho_k_losses(fig[2, 1], componentwise_losses, rhos)
     subfig_bubs, ax_bubs = bubbles(
       fig[1, 1],
       loadings,
       signatures,
-      valid_results;
+      results;
       w_metric,
       weighting_function=(wdiff, hdiff) -> wdiff
     )
@@ -340,9 +342,11 @@ function generate_plots_hyprunmix(; cache_name="nys=20-multiplier=1", dataset="u
     bubs_legend_and_colorbar[1:2, 1] = subfig_bubs.content[2].content.content .|> x -> x.content
 
 
-    ax1 = Axis(fig; yscale=identity, xticks=(1.5:length(valid_results)+0.5, ["K = $(i)" for i in 1:length(valid_results)]))
+    k_labels = results .|> x -> size(x.H, 1)
+    ax1 = Axis(fig; yscale=identity, xticks=(1.5:length(results)+0.5, ["K = $(i)" for i in k_labels]),
+      yticks=0:length(results))
     ax2 = Axis(fig; yscale=identity, limits=(nothing, (0, nothing)),
-      xticks=(1.5:length(valid_results)+0.5, ["K = $(i)" for i in 1:length(valid_results)]))
+      xticks=(1.5:length(results)+0.5, ["K = $(i)" for i in k_labels]))
 
     mrl_maxes = compare_against_gt.(
       [loadings],
@@ -352,12 +356,15 @@ function generate_plots_hyprunmix(; cache_name="nys=20-multiplier=1", dataset="u
       weighting_function=(wdiff, hdiff) -> wdiff
     )
 
-    modelargs = [norm(r.W * r.H - X) / sqrt(D * N) for r in results[1:6]] .|> x -> (x,)
+    modelargs = [norm(r.W * r.H - X) / sqrt(D * N) for r in results] .|> x -> (x,)
     model = (m, s) -> Normal(m, s)
-    # modelargs = ()
+    # modelargs = [() for _ in 1:6]
     # model = x -> Poisson(x)
-    bic = [BIC(X, results[k]; model=model, modelargs=modelargs[k]) for k in 1:6]
-    lines!(ax1, 1.5:length(valid_results)+0.5, bic; label="BIC")
+    bic = [BIC(X, results[k]; model, modelargs=modelargs[k]) for k in eachindex(results)]
+    bic_order = sortperm(bic) |> invperm
+    lines!(ax1, 1.5:length(results)+0.5, bic_order; color=:red, label="BIC order")
+    # lines!(ax1, 1.5:length(valid_results)+0.5, bic; label="BIC")
+
     lines!(ax2, 1.5:length(valid_results)+0.5, [mm[2] for mm in mrl_maxes]; label="max difference", color=:orange)
     linkxaxes!(ax_bubs, ax1, ax2)
     subfig_bubs[1, 1] = ax1
@@ -370,31 +377,34 @@ function generate_plots_hyprunmix(; cache_name="nys=20-multiplier=1", dataset="u
     subfig_bubs[3, 2] = bubs_legend_and_colorbar
 
     rowsize!(subfig_bubs, 3, Relative(1 // 2))
+    rowsize!(fig.layout, 2, Relative(1 // 3))
 
-    fig[0, :] = Label(fig, "Urban - Hyperspectral unmixing", fontsize=30)
+    fig[0, :] = Label(fig, "Urban - Hyperspectral unmixing"; tellwidth=false, fontsize=30)
 
     save("../plots/hyprunmix/$(dataset)/$(cache_name)/composite-$(nmf_alg)/pdf/composite-$(nmf_alg)-$(dataset)$(filenameappend).pdf", fig)
     save("../plots/hyprunmix/$(dataset)/$(cache_name)/composite-$(nmf_alg)/svg/composite-$(nmf_alg)-$(dataset)$(filenameappend).svg", fig)
   end
 end
 
-function generate_plots_synthetic(; cache_name="nys=20-multiplier=200", nmf_algs=["multdiv", "greedycd"])
+function generate_plots_synthetic(; cache_name="nys=20-multiplier=200", nmf_algs=["multdiv", "greedycd"], rho_choice=Nothing)
   println("program start...")
   signatures_unsorted = CSV.read("../synthetic-data-2023/alexandrov2015_signatures.tsv", DataFrame; delim='\t')
   signatures = sort(signatures_unsorted)
   cancer_categories = Dict(
     # "skin" => "107-skin-melanoma-all-seed-1",
     # "ovary" => "113-ovary-adenoca-all-seed-1",
-    "breast" => "214-breast-all-seed-1",
+    # "breast" => "214-breast-all-seed-1",
     # "liver" => "326-liver-hcc-all-seed-1",
-    "lung" => "38-lung-adenoca-all-seed-1",
+    # "lung" => "38-lung-adenoca-all-seed-1",
     # "stomach" => "75-stomach-adenoca-all-seed-1"
+    "breast-custom" => "450-breast-custom",
   )
   misspecification_type = Dict(
     "none" => "",
-    "contaminated" => "-contamination-2",
-    "overdispersed" => "-overdispersed-2.0",
-    "perturbed" => "-perturbed-0.0025")
+    # "contaminated" => "-contamination-2",
+    # "overdispersed" => "-overdispersed-2.0",
+    # "perturbed" => "-perturbed-0.0025"
+  )
 
   println("start looping...")
   for nmf_alg in nmf_algs, cancer in keys(cancer_categories)
@@ -417,22 +427,24 @@ function generate_plots_synthetic(; cache_name="nys=20-multiplier=200", nmf_algs
         size(r.H)[1] <= nloadings
       end
       fig = Figure(size=(3200, 1600))
-      rhos = 0:0.01:40
+      rhos = 0:0.01:20
 
-      rho_k_losses(fig[1, 2][1, 1], componentwise_losses, rhos)
+      rho_k_losses(fig[1, 2][1, 1], componentwise_losses, rhos; rho_choice)
       rho_k_bottom(fig[1, 2][2, 1], componentwise_losses)
-      subfig_bubs, ax_bubs = bubbles(fig[1, 1], loadings, signatures, valid_results; weighting_function=(cd, ld) -> cd + tanh(0.1ld))
+      subfig_bubs, ax_bubs = bubbles(fig[1, 1], loadings, signatures, results;
+        weighting_function=(wdiff, hdiff) -> wdiff + tanh(0.1hdiff), simplex_W=true)
       bubs_legend_and_colorbar = GridLayout()
       bubs_legend_and_colorbar[1:2, 1] = subfig_bubs.content[2].content.content .|> x -> x.content
 
 
-      ax1 = Axis(fig; yscale=log10, xticks=(1.5:length(valid_results)+0.5, ["K = $(i)" for i in 1:length(valid_results)]),
+      k_labels = results .|> x -> size(x.H, 1)
+      ax1 = Axis(fig; yscale=log10, xticks=(1.5:length(results)+0.5, ["K = $(i)" for i in k_labels]),
         yaxisposition=:right, ytickcolor=:blue, yticklabelcolor=:blue)
       ax2 = Axis(fig; yscale=identity, limits=(nothing, (0, nothing)),
-        xticks=(1.5:length(valid_results)+0.5, ["K = $(i)" for i in 1:length(valid_results)]),
+        xticks=(1.5:length(results)+0.5, ["K = $(i)" for i in k_labels]),
         ytickcolor=:orange, yticklabelcolor=:orange)
-      ax3 = Axis(fig; yscale=identity, xticks=(1.5:length(valid_results)+0.5, ["K = $(i)" for i in 1:length(valid_results)]),
-        yticks=0:length(valid_results))
+      ax3 = Axis(fig; yscale=identity, xticks=(1.5:length(results)+0.5, ["K = $(i)" for i in k_labels]),
+        yticks=0:length(results))
 
       mrl_maxes = compare_against_gt.([loadings], [signatures], valid_results; weighting_function=(cd, ld) -> cd + tanh(0.1ld))
       plt1 = lines!(ax1, 1.5:length(valid_results)+0.5, [mm[1] for mm in mrl_maxes]; color=:blue)
@@ -440,11 +452,11 @@ function generate_plots_synthetic(; cache_name="nys=20-multiplier=200", nmf_algs
 
       modelargs = ()
       model = x -> Poisson(x)
-      bic = [BIC(X, results[k]; model, modelargs) for k in 1:length(valid_results)]
+      bic = [BIC(X, results[k]; model, modelargs) for k in eachindex(results)]
       bic_order = sortperm(bic) |> invperm
-      plt3 = lines!(ax3, 1.5:length(valid_results)+0.5, bic_order; color=:red)
+      plt3 = lines!(ax3, 1.5:length(results)+0.5, bic_order; color=:red)
 
-      linkxaxes!(ax_bubs, ax1, ax2)
+      linkxaxes!(ax_bubs, ax1, ax2, ax3)
       subfig_bubs[1, 1] = ax1
       subfig_bubs[1, 1] = ax2
       subfig_bubs[2, 1] = ax3
@@ -470,12 +482,13 @@ function generate_plots_real(; cache_name="nys=20-multiplier=200", nmf_algs=["mu
   signatures_unsorted = CSV.read("../WGS_PCAWG.96.ready/COSMIC_v3.4_SBS_GRCh38.tsv", DataFrame; delim='\t')
   signatures = sort(signatures_unsorted)
   cancer_categories = Dict(
-    "skin" => "Skin-Melanoma",
-    "ovary" => "Ovary-AdenoCA",
+    # "skin" => "Skin-Melanoma",
+    # "ovary" => "Ovary-AdenoCA",
     "breast" => "Breast",
-    "liver" => "Liver-HCC",
+    # "liver" => "Liver-HCC",
     "lung" => "Lung-SCC",
-    "stomach" => "Stomach-AdenoCA")
+    # "stomach" => "Stomach-AdenoCA"
+  )
   artifacts = "SBS" .* ["27", "43", "45", "46", "47", "48", "49", "50", "51", "52", "53", "54", "55", "56", "57", "58", "59", "60", "95"]
 
   sig_names = filter(x -> !in(x, artifacts), names(signatures)[3:end])
@@ -489,8 +502,8 @@ function generate_plots_real(; cache_name="nys=20-multiplier=200", nmf_algs=["mu
 
     println("alg: $(nmf_alg)\tcancer: $(cancer)")
     # jldsave("../result-cache/rho-k-$(cancer_categories[cancer])$(misspecification_type[misspec]).jld2"; rhos, ks, losses, results)
-    # data = CSV.read("../synthetic-data-2023/synthetic-$(cancer_categories[cancer])$(misspecification_type[misspec]).tsv", DataFrame; delim='\t')
-    # X = Matrix(data[:, 2:end])
+    data = CSV.read("../WGS_PCAWG.96.ready/$(cancer_categories[cancer]).tsv", DataFrame; delim='\t')
+    X = Matrix(data[:, 2:end])
 
     file = load("../result-cache-real/$(cache_name)/cache-real-$(nmf_alg)-$(cancer_categories[cancer]).jld2")
     results = [r for r in file["results"]]
@@ -505,25 +518,36 @@ function generate_plots_real(; cache_name="nys=20-multiplier=200", nmf_algs=["mu
 
     rho_k_losses(fig[1, 2][1, 1], componentwise_losses, rhos)
     rho_k_bottom(fig[1, 2][2, 1], componentwise_losses)
-    subfig_bubs, ax_bubs = bubbles(fig[1, 1], loadings, signatures, valid_results; weighting_function=(cd, _) -> cd)
+    subfig_bubs, ax_bubs = bubbles(fig[1, 1], loadings, signatures, valid_results; weighting_function=(cd, _) -> cd, simplex_W=true)
     bubs_legend_and_colorbar = GridLayout()
     bubs_legend_and_colorbar[1:2, 1] = subfig_bubs.content[2].content.content .|> x -> x.content
 
 
     ax2 = Axis(fig; yscale=identity, limits=(nothing, (0, nothing)),
       xticks=(1.5:length(valid_results)+0.5, ["K = $(i)" for i in 1:length(valid_results)]))
+    ax3 = Axis(fig; yscale=identity, xticks=(1.5:length(valid_results)+0.5, ["K = $(i)" for i in 1:length(valid_results)]),
+      yticks=0:length(valid_results))
 
     mrl_maxes = compare_against_gt.([loadings], [signatures], valid_results; weighting_function=(cd, _) -> cd)
     lines!(ax2, 1.5:length(valid_results)+0.5, [mm[2] for mm in mrl_maxes]; label="max difference", color=:orange)
-    linkxaxes!(ax_bubs, ax2)
+
+    modelargs = ()
+    model = x -> Poisson(x)
+    bic = [BIC(X, results[k]; model, modelargs) for k in 1:length(valid_results)]
+    bic_order = sortperm(bic) |> invperm
+    plt3 = lines!(ax3, 1.5:length(valid_results)+0.5, bic_order; color=:red)
+
+    linkxaxes!(ax_bubs, ax2, ax3)
     subfig_bubs[1, 1] = ax2
-    subfig_bubs[2, 1] = ax_bubs
+    subfig_bubs[2, 1] = ax3
+    subfig_bubs[3, 1] = ax_bubs
 
 
     subfig_bubs[1, 2] = Legend(fig, ax2)
-    subfig_bubs[2, 2] = bubs_legend_and_colorbar
+    subfig_bubs[2, 2] = Legend(fig, [plt3], ["BIC Order"])
+    subfig_bubs[3, 2] = bubs_legend_and_colorbar
 
-    rowsize!(subfig_bubs, 2, Relative(7 // 8))
+    rowsize!(subfig_bubs, 3, Relative(6 // 8))
 
     fig[0, :] = Label(fig, "$(cancer_categories[cancer])", fontsize=30)
 
@@ -532,12 +556,16 @@ function generate_plots_real(; cache_name="nys=20-multiplier=200", nmf_algs=["mu
   end
 end
 
-# cache_result_synthetic(; result_generation=stan_result_generation_synthetic,  nmf_algs=["stan"])
+# cache_result_synthetic(; overwrite=true, result_generation=stan_result_generation_synthetic,  nmf_algs=["stan"], nysamples=100, multiplier=150)
 # cache_result_real(; nmf_algs=["bssmf"])
-cache_result_real(; result_generation=stan_result_generation_real, nmf_algs=["stan"])
+# cache_result_real(; result_generation=stan_result_generation_real, nmf_algs=["stan"])
 # generate_plots_real(; cache_name="nys=20-multiplier=200", nmf_algs=["multdiv", "greedycd", "bssmf", "alspgrad"])
 # generate_plots_real(; cache_name="musicatk-nys=20-multiplier=200", nmf_algs=["nmf", "lda", "nsnmf"])
-# generate_plots_synthetic(; cache_name="stan-nys=20-multiplier=200", nmf_algs=["stan"])
-# generate_rho_performance_plots_synthetic(; cache_name="stan-nys=20-multiplier=200", nmf_algs=["stan"])
+# generate_plots_synthetic(; cache_name="stan-nys=100-multiplier=150", nmf_algs=["stan"], rho_choice=0.9)
+# generate_rho_performance_plots_synthetic(; cache_name="stan-nys=100-multiplier=150", nmf_algs=["stan"])
 # generate_plots_hyprunmix(; cache_name="nys=15-multiplier=1", nmf_algs=["greedycd"], rhos=0:0.1:80, filenameappend="-lambdaw=0.5-lambdah=1.5")
-# cache_result_hyprunmix(; overwrite=true, nmf_algs=["multdiv"], nmfargs=(; replicates=16, ncpu=16))
+# cache_result_hyprunmix(; overwrite=true, nmf_algs=["greedycd"], 
+#   nmfargs=(; init=:random, replicates=16, ncpu=16, maxiter=10000, lambda_w=0.0, lambda_h=0.11, simplex_H=true), 
+#   filenameappend="lw=0.0-lh=0.11-simplexh")
+cache_result_hyprunmix(; overwrite=true, nmf_algs=["alspgrad"],
+  nmfargs=(; init=:random, replicates=16, ncpu=16, maxiter=10000, simplex_H=true), filenameappend="simplexh")

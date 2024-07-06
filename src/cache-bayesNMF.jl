@@ -11,16 +11,18 @@ function synthetic(K; overwrite=false)
   cancer_categories = Dict(
     # "skin" => "107-skin-melanoma-all-seed-1",
     # "ovary" => "113-ovary-adenoca-all-seed-1",
-    "breast" => "214-breast-all-seed-1",
+    # "breast" => "214-breast-all-seed-1",
     # "liver" => "326-liver-hcc-all-seed-1",
     # "lung" => "38-lung-adenoca-all-seed-1",
     # "stomach" => "75-stomach-adenoca-all-seed-1"
+    "breast-custom" => "450-breast-custom",
   )
   misspecification_type = Dict(
     "none" => "",
-    "contaminated" => "-contamination-2",
-    "overdispersed" => "-overdispersed-2.0",
-    "perturbed" => "-perturbed-0.0025")
+    # "contaminated" => "-contamination-2",
+    # "overdispersed" => "-overdispersed-2.0",
+    # "perturbed" => "-perturbed-0.0025"
+  )
   stan_program = read("poisson-nmf.stan", String)
   hyperpriors = CSV.read("../synthetic-data-2023/bayes-nmf-hyperprior.tsv", DataFrame; delim="\t")
   Base.Filesystem.mkpath("../raw-cache-stan/synthetic/")
@@ -34,7 +36,7 @@ function synthetic(K; overwrite=false)
         continue
       end
 
-      file = load("../result-cache-synthetic/nys=20-multiplier=200/cache-greedycd-$(cancer_categories[cancer])$(misspecification_type[misspec]).jld2")
+      file = load("../result-cache-synthetic/nys=20-multiplier=200/cache-multdiv-$(cancer_categories[cancer])$(misspecification_type[misspec]).jld2")
       result = file["results"][K]
 
       Wraw = result.W .+ 0.1maximum(result.W)
@@ -50,7 +52,7 @@ function synthetic(K; overwrite=false)
       init = (; theta=H, r=collect(eachcol(W)), nu=rand(K), mu=rand(K))
       model = SampleModel("model-$(cancer)-$(misspec)-$(K)", stan_program)
 
-      _ = stan_sample(model; data=data, init=init, num_chains=16, num_samples=1000, num_warmups=4000, delta=0.98, max_depth=12, show_logging=true)
+      _ = stan_sample(model; data=data, init=init, num_chains=4, num_samples=1000, num_warmups=3000, delta=0.98, max_depth=12, show_logging=true)
       result = read_samples(model, :dataframe)
       jldsave("../raw-cache-stan/synthetic/cache-stan-$(cancer_categories[cancer])$(misspecification_type[misspec])-$(K).jld2"; result)
     end
