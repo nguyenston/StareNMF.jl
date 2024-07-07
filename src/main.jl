@@ -77,12 +77,15 @@ const stan_result_generation_synthetic = (;
       "breast" => "214-breast-all-seed-1",
       "liver" => "326-liver-hcc-all-seed-1",
       "lung" => "38-lung-adenoca-all-seed-1",
-      "stomach" => "75-stomach-adenoca-all-seed-1")
+      "stomach" => "75-stomach-adenoca-all-seed-1",
+      "breast_custom" => "450-breast-custom"
+    )
     misspecification_type = Dict(
       "none" => "",
       "contaminated" => "-contamination-2",
       "overdispersed" => "-overdispersed-2.0",
-      "perturbed" => "-perturbed-0.0025")
+      "perturbed" => "-perturbed-0.0025"
+    )
     D, N = size(X)
 
     chain_to_result = K -> begin
