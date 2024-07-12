@@ -53,15 +53,23 @@ end
 
 const default_result_generation_synthetic = (;
   cache_name_prepend="",
-  rgen=(cancer, misspec, X, ks, nmf_alg, nmfargs) -> begin
+  rgen=(cancer, misspec, data_file_name, X, ks, nmf_alg, nmfargs) -> begin
     results = rank_determination(X, ks;
       nmfargs=(; alg=Symbol(nmf_alg), replicates=16, ncpu=16, simplex_W=true, nmfargs...))
     return results
   end
 )
+const from_cache_synthetic(in_cache_name, out_cache_name_prepend="") = (;
+  cache_name_prepend=out_cache_name_prepend,
+  rgen=(_, _, data_file_name, _, _, nmf_alg, _) -> begin
+    file = load("../result-cache-synthetic/$(in_cache_name)/cache-$(nmf_alg)-$(data_file_name).jld2")
+    results = [r for r in file["results"]]
+    return results
+  end
+)
 const R_result_generation_synthetic = (;
   cache_name_prepend="musicatk-",
-  rgen=(cancer, misspec, _, ks, nmf_alg, _) -> begin
+  rgen=(cancer, misspec, _, _, ks, nmf_alg, _) -> begin
     Ws = [CSV.read("../raw-cache-R/synthetic/$(nmf_alg)/$(cancer)-$(misspec)$(k)-W.csv", DataFrame)[:, 2:end] for k in ks] .|> Matrix
     Hs = [CSV.read("../raw-cache-R/synthetic/$(nmf_alg)/$(cancer)-$(misspec)$(k)-H.csv", DataFrame)[:, 2:end] for k in ks] .|> Matrix{Float64}
     results = NMF.Result{Float64}.(Ws, Hs, 0, true, 0)
@@ -70,26 +78,11 @@ const R_result_generation_synthetic = (;
 )
 const stan_result_generation_synthetic = (;
   cache_name_prepend="stan-",
-  rgen=(cancer, misspec, X, ks, _, _) -> begin
-    cancer_categories = Dict(
-      "skin" => "107-skin-melanoma-all-seed-1",
-      "ovary" => "113-ovary-adenoca-all-seed-1",
-      "breast" => "214-breast-all-seed-1",
-      "liver" => "326-liver-hcc-all-seed-1",
-      "lung" => "38-lung-adenoca-all-seed-1",
-      "stomach" => "75-stomach-adenoca-all-seed-1",
-      "breast_custom" => "450-breast-custom"
-    )
-    misspecification_type = Dict(
-      "none" => "",
-      "contaminated" => "-contamination-2",
-      "overdispersed" => "-overdispersed-2.0",
-      "perturbed" => "-perturbed-0.0025"
-    )
+  rgen=(_, _, data_file_name, X, ks, _, _) -> begin
     D, N = size(X)
 
     chain_to_result = K -> begin
-      chain = load("../raw-cache-stan/synthetic/cache-stan-$(cancer_categories[cancer])$(misspecification_type[misspec])-$(K).jld2")["result"]
+      chain = load("../raw-cache-stan/synthetic/cache-stan-$(data_file_name)-$(K).jld2")["result"]
       numsamples = nrow(chain)
       H = Iterators.product(1:K, 1:N) .|> ((k, n),) -> sum(chain[!, "theta.$(k).$(n)"]) / numsamples
       W = Iterators.product(1:D, 1:K) .|> ((d, k),) -> sum(chain[!, "r.$(k).$(d)"]) / numsamples
@@ -100,7 +93,10 @@ const stan_result_generation_synthetic = (;
     return results
   end
 )
-function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200, result_generation=default_result_generation_synthetic, nmfargs=(), nmf_algs=[])
+function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200,
+  result_generation=default_result_generation_synthetic, nmfargs=(), nmf_algs=[],
+  componentwise_loss_method=componentwise_loss, outfilenameappend="")
+
   println("program start...")
   cancer_categories = Dict(
     # "skin" => "107-skin-melanoma-all-seed-1",
@@ -109,13 +105,13 @@ function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200,
     # "liver" => "326-liver-hcc-all-seed-1",
     # "lung" => "38-lung-adenoca-all-seed-1",
     # "stomach" => "75-stomach-adenoca-all-seed-1"
-    "breast_custom" => "450-breast-custom",
+    "breast_custom" => "450-breast-custom-seed-1",
   )
   misspecification_type = Dict(
     "none" => "",
-    # "contaminated" => "-contamination-2",
-    # "overdispersed" => "-overdispersed-2.0",
-    # "perturbed" => "-perturbed-0.0025"
+    "contaminated" => "-contamination-2",
+    "overdispersed" => "-overdispersed-2.0",
+    "perturbed" => "-perturbed-0.0025"
   )
   cache_name_prepend, rgen = result_generation
   cache_name = "$(cache_name_prepend)nys=$(nysamples)-multiplier=$(multiplier)"
@@ -137,13 +133,13 @@ function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200,
       X = Matrix(data[:, 2:end])
 
       ks = 1:nloadings+3
-      results = rgen(cancer, misspec, X, ks, nmf_alg, nmfargs)
+      results = rgen(cancer, misspec, "$(cancer_categories[cancer])$(misspecification_type[misspec])", X, ks, nmf_alg, nmfargs)
       componentwise_losses = Vector{Vector{Float64}}(undef, length(results))
       Threads.@threads for i in eachindex(results)
         r = results[i]
-        componentwise_losses[i] = componentwise_loss(X, r.W, r.H; nysamples, approxargs=(; multiplier))
+        componentwise_losses[i] = componentwise_loss_method(X, r.W, r.H; nysamples, approxargs=(; multiplier))
       end
-      jldsave("../result-cache-synthetic/$(cache_name)/cache-$(nmf_alg)-$(cancer_categories[cancer])$(misspecification_type[misspec]).jld2"; results, componentwise_losses)
+      jldsave("../result-cache-synthetic/$(cache_name)/cache-$(nmf_alg)-$(cancer_categories[cancer])$(misspecification_type[misspec])$(outfilenameappend).jld2"; results, componentwise_losses)
     end
   end
 end
@@ -246,7 +242,7 @@ function generate_rho_performance_plots_synthetic(; cache_name="nys=20-multiplie
     # "liver" => "326-liver-hcc-all-seed-1",
     # "lung" => "38-lung-adenoca-all-seed-1",
     # "stomach" => "75-stomach-adenoca-all-seed-1"
-    "breast_custom" => "450-breast-custom",
+    "breast_custom" => "450-breast-custom-seed-1",
   )
   misspecification_type = Dict(
     "none" => "",
@@ -400,13 +396,13 @@ function generate_plots_synthetic(; cache_name="nys=20-multiplier=200", nmf_algs
     # "liver" => "326-liver-hcc-all-seed-1",
     # "lung" => "38-lung-adenoca-all-seed-1",
     # "stomach" => "75-stomach-adenoca-all-seed-1"
-    "breast_custom" => "450-breast-custom",
+    "breast_custom" => "450-breast-custom-seed-1",
   )
   misspecification_type = Dict(
     "none" => "",
-    # "contaminated" => "-contamination-2",
-    # "overdispersed" => "-overdispersed-2.0",
-    # "perturbed" => "-perturbed-0.0025"
+    "contaminated" => "-contamination-2",
+    "overdispersed" => "-overdispersed-2.0",
+    "perturbed" => "-perturbed-0.0025"
   )
 
   println("start looping...")
@@ -560,15 +556,21 @@ function generate_plots_real(; cache_name="nys=20-multiplier=200", nmf_algs=["mu
 end
 
 # cache_result_synthetic(; overwrite=true, result_generation=stan_result_generation_synthetic,  nmf_algs=["stan"], nysamples=100, multiplier=150)
+# cache_result_synthetic(; overwrite=true,  nmf_algs=["multdiv"], nysamples=20, multiplier=200)
+# cache_result_synthetic(; overwrite=true, result_generation=from_cache_synthetic("stan-nys=100-multiplier=150", "stan-"),
+#   nmf_algs=["stan"], nysamples=100, multiplier=150, outfilenameappend="-noYsample")
+generate_plots_synthetic(; cache_name="stan-nys=100-multiplier=150", nmf_algs=["stan"], rho_choice=0.9)
+# generate_rho_performance_plots_synthetic(; cache_name="stan-nys=100-multiplier=150", nmf_algs=["stan"])
+
 # cache_result_real(; nmf_algs=["bssmf"])
 # cache_result_real(; result_generation=stan_result_generation_real, nmf_algs=["stan"])
 # generate_plots_real(; cache_name="nys=20-multiplier=200", nmf_algs=["multdiv", "greedycd", "bssmf", "alspgrad"])
 # generate_plots_real(; cache_name="musicatk-nys=20-multiplier=200", nmf_algs=["nmf", "lda", "nsnmf"])
-# generate_plots_synthetic(; cache_name="stan-nys=100-multiplier=150", nmf_algs=["stan"], rho_choice=0.9)
-# generate_rho_performance_plots_synthetic(; cache_name="stan-nys=100-multiplier=150", nmf_algs=["stan"])
+
 # generate_plots_hyprunmix(; cache_name="nys=15-multiplier=1", nmf_algs=["greedycd"], rhos=0:0.1:80, filenameappend="-lambdaw=0.5-lambdah=1.5")
 # cache_result_hyprunmix(; overwrite=true, nmf_algs=["greedycd"], 
 #   nmfargs=(; init=:random, replicates=16, ncpu=16, maxiter=10000, lambda_w=0.0, lambda_h=0.11, simplex_H=true), 
 #   filenameappend="lw=0.0-lh=0.11-simplexh")
-cache_result_hyprunmix(; overwrite=true, nmf_algs=["alspgrad"],
-  nmfargs=(; init=:random, replicates=16, ncpu=16, maxiter=10000, simplex_H=true), filenameappend="simplexh")
+# cache_result_hyprunmix(; overwrite=true, nmf_algs=["alspgrad"],
+#   nmfargs=(; init=:random, replicates=16, ncpu=16, maxiter=10000, simplex_H=true), 
+#   filenameappend="simplexh")
