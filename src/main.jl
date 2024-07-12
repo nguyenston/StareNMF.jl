@@ -53,7 +53,7 @@ end
 
 const default_result_generation_synthetic = (;
   cache_name_prepend="",
-  rgen=(cancer, misspec, data_file_name, X, ks, nmf_alg, nmfargs) -> begin
+  rgen=(data_file_name, X, ks, nmf_alg, nmfargs) -> begin
     results = rank_determination(X, ks;
       nmfargs=(; alg=Symbol(nmf_alg), replicates=16, ncpu=16, simplex_W=true, nmfargs...))
     return results
@@ -61,7 +61,7 @@ const default_result_generation_synthetic = (;
 )
 const from_cache_synthetic(in_cache_name, out_cache_name_prepend="") = (;
   cache_name_prepend=out_cache_name_prepend,
-  rgen=(_, _, data_file_name, _, _, nmf_alg, _) -> begin
+  rgen=(data_file_name, _, _, nmf_alg, _) -> begin
     file = load("../result-cache-synthetic/$(in_cache_name)/cache-$(nmf_alg)-$(data_file_name).jld2")
     results = [r for r in file["results"]]
     return results
@@ -69,16 +69,16 @@ const from_cache_synthetic(in_cache_name, out_cache_name_prepend="") = (;
 )
 const R_result_generation_synthetic = (;
   cache_name_prepend="musicatk-",
-  rgen=(cancer, misspec, _, _, ks, nmf_alg, _) -> begin
-    Ws = [CSV.read("../raw-cache-R/synthetic/$(nmf_alg)/$(cancer)-$(misspec)$(k)-W.csv", DataFrame)[:, 2:end] for k in ks] .|> Matrix
-    Hs = [CSV.read("../raw-cache-R/synthetic/$(nmf_alg)/$(cancer)-$(misspec)$(k)-H.csv", DataFrame)[:, 2:end] for k in ks] .|> Matrix{Float64}
+  rgen=(data_file_name, _, ks, nmf_alg, _) -> begin
+    Ws = [CSV.read("../raw-cache-R/synthetic/$(nmf_alg)/$(data_file_name)-$(k)-W.csv", DataFrame)[:, 2:end] for k in ks] .|> Matrix
+    Hs = [CSV.read("../raw-cache-R/synthetic/$(nmf_alg)/$(data_file_name)-$(k)-H.csv", DataFrame)[:, 2:end] for k in ks] .|> Matrix{Float64}
     results = NMF.Result{Float64}.(Ws, Hs, 0, true, 0)
     return results
   end
 )
 const stan_result_generation_synthetic = (;
   cache_name_prepend="stan-",
-  rgen=(_, _, data_file_name, X, ks, _, _) -> begin
+  rgen=(data_file_name, X, ks, _, _) -> begin
     D, N = size(X)
 
     chain_to_result = K -> begin
