@@ -6,7 +6,7 @@ include("./utils/utils.jl")
 
 export UniformApproximate
 export PiecewiseUniform, KDEUniform
-export distance_from_standard_uniform
+export KL_distance_from_standard_uniform
 export generate_empirical_eps_sets, structurally_aware_loss
 export componentwise_loss, stare_from_componentwise_loss
 
@@ -81,7 +81,7 @@ end
 """
 Compute the KL Divergence D_KL(d|Uniform(0,1))
 """
-function distance_from_standard_uniform(d::PiecewiseUniform)
+function KL_distance_from_standard_uniform(d::PiecewiseUniform)
   function loss_map((w, h))
     @assert h >= 0 "negative h: $(h)"
     w * h * log(h)
@@ -94,7 +94,7 @@ end
 """
 Compute the KL Divergence D_KL(d|Uniform(0,1))
 """
-function distance_from_standard_uniform(d::KDEUniform)
+function KL_distance_from_standard_uniform(d::KDEUniform)
   distr = d.estimated_distr
   width = step(distr.x)
   density = distr.density
@@ -107,7 +107,7 @@ function componentwise_loss(X::Matrix{R}, W::Matrix{F}, H::Matrix{F};
   approx_type::Type{T}=KDEUniform, nysamples::Integer=1, approxargs=()) where {T<:UniformApproximate,F<:AbstractFloat,R<:Real}
 
   empirical_eps = generate_empirical_eps_sets(X, W, H, approx_type; nysamples, approxargs)
-  return dropdims(sum(distance_from_standard_uniform.(empirical_eps); dims=1); dims=1)
+  return dropdims(sum(KL_distance_from_standard_uniform.(empirical_eps); dims=1); dims=1)
 end
 
 function stare_from_componentwise_loss(cwl, rho; lambda=0.01)
