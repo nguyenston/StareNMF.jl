@@ -15,7 +15,7 @@ function synthetic(K; overwrite=false)
     # "liver" => "326-liver-hcc-all-seed-1",
     # "lung" => "38-lung-adenoca-all-seed-1",
     # "stomach" => "75-stomach-adenoca-all-seed-1"
-    "breast_custom" => "450-breast-custom",
+    "breast_custom" => "450-breast-custom-seed-1",
   )
   misspecification_type = Dict(
     "none" => "",
@@ -99,4 +99,4 @@ function real(K; overwrite=false)
     jldsave("../raw-cache-stan/real/cache-stan-$(cancer_categories[cancer])-$(K).jld2"; result)
   end
 end
-real(parse(Int, ARGS[1]))
+synthetic(parse(Int, ARGS[1]))
