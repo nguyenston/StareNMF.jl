@@ -80,6 +80,10 @@ custom_solve!(alg::NMF.GreedyCD{T}, X, W, H, simplex_H=false) where {T} =
 custom_solve!(alg::NMF.ALSPGrad, X, W, H, simplex_H=false) =
   nmf_skeleton!(NMF.ALSPGradUpd(alg.update_H, alg.maxsubiter, alg.tolg), X, W, H, alg.maxiter, alg.verbose, alg.tol, simplex_H)
 
+custom_solve!(alg::NMF.CoordinateDescent{T}, X, W, H, simplex_H=false) where {T} =
+  nmf_skeleton!(NMF.CoordinateDescentUpd{T}(alg.α, alg.l₁ratio, alg.regularization, alg.shuffle, alg.update_H),
+    X, W, H, alg.maxiter, alg.verbose, alg.tol, simplex_H)
+
 function custom_solve!(alg::NMF.MultUpdate{T}, X, W, H, simplex_H=false) where {T}
   if alg.obj == :mse
     nmf_skeleton!(NMF.MultUpdMSE(alg.update_H, alg.lambda_w, alg.lambda_h, sqrt(eps(T))), X, W, H, alg.maxiter, alg.verbose, alg.tol, simplex_H)
