@@ -102,7 +102,7 @@ function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200,
     # "skin" => "107-skin-melanoma-all-seed-1",
     # "ovary" => "113-ovary-adenoca-all-seed-1",
     # "breast" => "214-breast-all-seed-1",
-    # "liver" => "326-liver-hcc-all-seed-1",
+    "liver" => "326-liver-hcc-all-seed-1",
     # "lung" => "38-lung-adenoca-all-seed-1",
     # "stomach" => "75-stomach-adenoca-all-seed-1"
     "breast_custom" => "450-breast-custom-seed-1",
@@ -133,7 +133,7 @@ function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200,
       X = Matrix(data[:, 2:end])
 
       ks = 1:nloadings+3
-      results = rgen(cancer, misspec, "$(cancer_categories[cancer])$(misspecification_type[misspec])", X, ks, nmf_alg, nmfargs)
+      results = rgen("$(cancer_categories[cancer])$(misspecification_type[misspec])", X, ks, nmf_alg, nmfargs)
       componentwise_losses = Vector{Vector{Float64}}(undef, length(results))
       Threads.@threads for i in eachindex(results)
         r = results[i]
@@ -385,7 +385,7 @@ function generate_plots_hyprunmix(; cache_name="nys=20-multiplier=1", dataset="u
   end
 end
 
-function generate_plots_synthetic(; cache_name="nys=20-multiplier=200", nmf_algs=["multdiv", "greedycd"], rho_choice=Nothing)
+function generate_plots_synthetic(; cache_name="nys=20-multiplier=200", nmf_algs=["multdiv", "greedycd"], rho_choice=Nothing, filenameappend="")
   println("program start...")
   signatures_unsorted = CSV.read("../synthetic-data-2023/alexandrov2015_signatures.tsv", DataFrame; delim='\t')
   signatures = sort(signatures_unsorted)
@@ -393,10 +393,10 @@ function generate_plots_synthetic(; cache_name="nys=20-multiplier=200", nmf_algs
     # "skin" => "107-skin-melanoma-all-seed-1",
     # "ovary" => "113-ovary-adenoca-all-seed-1",
     # "breast" => "214-breast-all-seed-1",
-    # "liver" => "326-liver-hcc-all-seed-1",
+    "liver" => "326-liver-hcc-all-seed-1",
     # "lung" => "38-lung-adenoca-all-seed-1",
     # "stomach" => "75-stomach-adenoca-all-seed-1"
-    "breast_custom" => "450-breast-custom-seed-1",
+    # "breast_custom" => "450-breast-custom-seed-1",
   )
   misspecification_type = Dict(
     "none" => "",
@@ -418,7 +418,7 @@ function generate_plots_synthetic(; cache_name="nys=20-multiplier=200", nmf_algs
       data = CSV.read("../synthetic-data-2023/synthetic-$(cancer_categories[cancer])$(misspecification_type[misspec]).tsv", DataFrame; delim='\t')
       X = Matrix(data[:, 2:end])
 
-      file = load("../result-cache-synthetic/$(cache_name)/cache-$(nmf_alg)-$(cancer_categories[cancer])$(misspecification_type[misspec]).jld2")
+      file = load("../result-cache-synthetic/$(cache_name)/cache-$(nmf_alg)-$(cancer_categories[cancer])$(misspecification_type[misspec])$(filenameappend).jld2")
       results = [r for r in file["results"]]
       componentwise_losses = file["componentwise_losses"]
 
@@ -468,10 +468,10 @@ function generate_plots_synthetic(; cache_name="nys=20-multiplier=200", nmf_algs
 
       rowsize!(subfig_bubs, 3, Relative(1 // 2))
 
-      fig[0, :] = Label(fig, "$(cancer_categories[cancer])$(misspecification_type[misspec])", fontsize=30)
+      fig[0, :] = Label(fig, "$(cancer_categories[cancer])$(misspecification_type[misspec])$(filenameappend)", fontsize=30)
 
-      save("../plots/synthetic/$(cache_name)/composite-$(nmf_alg)/pdf/composite-$(nmf_alg)-$(cancer_categories[cancer])$(misspecification_type[misspec]).pdf", fig)
-      save("../plots/synthetic/$(cache_name)/composite-$(nmf_alg)/svg/composite-$(nmf_alg)-$(cancer_categories[cancer])$(misspecification_type[misspec]).svg", fig)
+      save("../plots/synthetic/$(cache_name)/composite-$(nmf_alg)/pdf/composite-$(nmf_alg)-$(cancer_categories[cancer])$(misspecification_type[misspec])$(filenameappend).pdf", fig)
+      save("../plots/synthetic/$(cache_name)/composite-$(nmf_alg)/svg/composite-$(nmf_alg)-$(cancer_categories[cancer])$(misspecification_type[misspec])$(filenameappend).svg", fig)
     end
   end
 end
@@ -556,10 +556,11 @@ function generate_plots_real(; cache_name="nys=20-multiplier=200", nmf_algs=["mu
 end
 
 # cache_result_synthetic(; overwrite=true, result_generation=stan_result_generation_synthetic,  nmf_algs=["stan"], nysamples=100, multiplier=150)
-# cache_result_synthetic(; overwrite=true,  nmf_algs=["multdiv"], nysamples=20, multiplier=200)
+# cache_result_synthetic(; overwrite=true, nmf_algs=["multdiv"], nysamples=20, multiplier=200)
 # cache_result_synthetic(; overwrite=true, result_generation=from_cache_synthetic("stan-nys=100-multiplier=150", "stan-"),
-#   nmf_algs=["stan"], nysamples=100, multiplier=150, outfilenameappend="-noYsample")
-generate_plots_synthetic(; cache_name="stan-nys=100-multiplier=150", nmf_algs=["stan"], rho_choice=0.9)
+#   nmf_algs=["stan"], nysamples=100, multiplier=150, componentwise_loss_method=StareNMF.componentwise_loss_noysample,
+#   outfilenameappend="-noYsample")
+# generate_plots_synthetic(; cache_name="stan-nys=100-multiplier=150", nmf_algs=["stan"], rho_choice=0.9, filenameappend="-noYsample")
 # generate_rho_performance_plots_synthetic(; cache_name="stan-nys=100-multiplier=150", nmf_algs=["stan"])
 
 # cache_result_real(; nmf_algs=["bssmf"])
@@ -567,10 +568,15 @@ generate_plots_synthetic(; cache_name="stan-nys=100-multiplier=150", nmf_algs=["
 # generate_plots_real(; cache_name="nys=20-multiplier=200", nmf_algs=["multdiv", "greedycd", "bssmf", "alspgrad"])
 # generate_plots_real(; cache_name="musicatk-nys=20-multiplier=200", nmf_algs=["nmf", "lda", "nsnmf"])
 
-# generate_plots_hyprunmix(; cache_name="nys=15-multiplier=1", nmf_algs=["greedycd"], rhos=0:0.1:80, filenameappend="-lambdaw=0.5-lambdah=1.5")
+# generate_plots_hyprunmix(; cache_name="nys=15-multiplier=1", nmf_algs=["cd"], rhos=0:0.1:80, filenameappend="-simplexh")
 # cache_result_hyprunmix(; overwrite=true, nmf_algs=["greedycd"], 
 #   nmfargs=(; init=:random, replicates=16, ncpu=16, maxiter=10000, lambda_w=0.0, lambda_h=0.11, simplex_H=true), 
 #   filenameappend="lw=0.0-lh=0.11-simplexh")
+
+cache_result_hyprunmix(; overwrite=true, nmf_algs=["cd"],
+  nmfargs=(; init=:nndsvda, replicates=16, ncpu=16, maxiter=10000, α=0.1, regularization=:components, l₁ratio=1.0, simplex_H=true),
+  filenameappend="l1h=0.1-simplexh")
+
 # cache_result_hyprunmix(; overwrite=true, nmf_algs=["alspgrad"],
 #   nmfargs=(; init=:random, replicates=16, ncpu=16, maxiter=10000, simplex_H=true), 
 #   filenameappend="simplexh")
