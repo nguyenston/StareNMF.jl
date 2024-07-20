@@ -156,6 +156,7 @@ function bubbles(gridpos, gt_loadings::DataFrame, gt_signatures::DataFrame, nmf_
   weighting_function=(wdiff, hdiff) -> wdiff + tanh(0.2hdiff),
   w_metric=(w, w_gt) -> 1 - (normalize(w)' * normalize(w_gt)),
   h_metric=(h, h_gt) -> abs(h - h_gt) / h_gt,
+  colorrange=(0, 0.3),
   simplex_W=false) where {T<:Number}
 
   subfig = GridLayout()
@@ -181,7 +182,6 @@ function bubbles(gridpos, gt_loadings::DataFrame, gt_signatures::DataFrame, nmf_
   strokewidth = 1
   colormap = :Blues_5
   highclip = :black
-  colorrange = (0, 0.3)
   radius = x -> 50 * sqrt(x / max_radius)
   points = Point2f.(0.5, 1:n_gt_sig)
   legendradiuses = [round(max_radius / 4; sigdigits=2), round(max_radius / 2; sigdigits=2), max_radius]
@@ -217,7 +217,7 @@ function bubbles(gridpos, gt_loadings::DataFrame, gt_signatures::DataFrame, nmf_
 
     points = Point2f.(r_idx + 0.5, assignment)
     scatter!(ax, points; colorrange, colormap, strokewidth, highclip,
-      markersize=radius.(avg_inferred_loadings), color=[assignment[i] <= n_gt_sig ? w_diffs[i, assignment[i]] : 1.0 for i in 1:K])
+      markersize=radius.(avg_inferred_loadings), color=[assignment[i] <= n_gt_sig ? w_diffs[i, assignment[i]] : max(colorrange...) + 1.0 for i in 1:K])
   end
   legend = Legend(gridpos, group_size, string.(legendradiuses), "Mean Loading";
     tellheight=true, patchsize=(35, 35))
