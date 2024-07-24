@@ -102,10 +102,10 @@ function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200,
     # "skin" => "107-skin-melanoma-all-seed-1",
     # "ovary" => "113-ovary-adenoca-all-seed-1",
     # "breast" => "214-breast-all-seed-1",
-    "liver" => "326-liver-hcc-all-seed-1",
+    # "liver" => "326-liver-hcc-all-seed-1",
     # "lung" => "38-lung-adenoca-all-seed-1",
     # "stomach" => "75-stomach-adenoca-all-seed-1"
-    "breast_custom" => "450-breast-custom-seed-1",
+    "breast_custom" => "600-breast-custom-seed-1",
   )
   misspecification_type = Dict(
     "none" => "",
@@ -242,7 +242,7 @@ function generate_rho_performance_plots_synthetic(; cache_name="nys=20-multiplie
     # "liver" => "326-liver-hcc-all-seed-1",
     # "lung" => "38-lung-adenoca-all-seed-1",
     # "stomach" => "75-stomach-adenoca-all-seed-1"
-    "breast_custom" => "450-breast-custom-seed-1",
+    "breast_custom" => "600-breast-custom-seed-1",
   )
   misspecification_type = Dict(
     "none" => "",
@@ -396,7 +396,7 @@ function generate_plots_synthetic(; cache_name="nys=20-multiplier=200", nmf_algs
     "liver" => "326-liver-hcc-all-seed-1",
     # "lung" => "38-lung-adenoca-all-seed-1",
     # "stomach" => "75-stomach-adenoca-all-seed-1"
-    # "breast_custom" => "450-breast-custom-seed-1",
+    # "breast_custom" => "600-breast-custom-seed-1",
   )
   misspecification_type = Dict(
     "none" => "",
