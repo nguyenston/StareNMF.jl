@@ -184,7 +184,8 @@ Note: ncpu is irrelevant for :bssmf
 function threaded_nmf(X::AbstractMatrix{T}, k::Integer;
   replicates::Integer=1, ncpu::Integer=1,
   alg::Symbol=:multdiv, init::Symbol=:nndsvdar,
-  simplex_W::Bool=false, kwargs...) where {T}
+  simplex_W::Bool=false, performance_metric=result -> result.objvalue,
+  kwargs...) where {T}
 
   results = Vector{NMF.Result{Float64}}(undef, replicates)
   c = Channel() do ch
@@ -211,7 +212,7 @@ function threaded_nmf(X::AbstractMatrix{T}, k::Integer;
       results[i] = run_nmf(X, k; alg, init=_init, kwargs...)
     end
   end
-  _, min_idx = findmin(x -> x.objvalue, results)
+  _, min_idx = findmin(performance_metric, results)
   return results[min_idx]
 end
 
