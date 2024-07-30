@@ -131,7 +131,7 @@ function sample_eps_normal(sigs::Vector{Float64})
 end
 
 function generate_empirical_eps_sets(X::Matrix{R}, W::Matrix{F}, H::Matrix{F}, approx_type::Type{T};
-  nysamples::Integer=1, approxargs=(), sample_eps=sample_eps_poisson) where {T<:UniformApproximate,F<:AbstractFloat,R<:Real}
+  nysamples::Integer=20, approxargs=(), sample_eps=sample_eps_poisson) where {T<:UniformApproximate,F<:AbstractFloat,R<:Real}
 
   # sanity checking
   D_X, N_X = size(X)
@@ -147,10 +147,12 @@ function generate_empirical_eps_sets(X::Matrix{R}, W::Matrix{F}, H::Matrix{F}, a
 
   eps_conditional = reshape([Float64[] for _ in 1:D*K], (D, K))
 
-  for n in 1:N, _ in 1:nysamples
+  for n in 1:N
     x = X[:, n]
     h = H[:, n]
-    push!.(eps_conditional, sample_eps(x, W, h))
+    for _ in 1:nysamples
+      push!.(eps_conditional, sample_eps(x, W, h))
+    end
   end
   return approx_type.(eps_conditional; approxargs...)
 end
