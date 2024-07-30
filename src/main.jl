@@ -23,10 +23,10 @@ function rank_determination(X, ks; nmfargs=())
   results
 end
 
-function cache_result_hyprunmix(; overwrite=false, nysamples=15, multiplier=1,
+function cache_result_hyprunmix(; overwrite=false, nysamples=15,
   dataset="urban", nmf_algs=["bssmf"], nmfargs=(), filenameappend="")
   println("program start...")
-  cache_name = "nys=$(nysamples)-multiplier=$(multiplier)"
+  cache_name = "nys=$(nysamples)"
 
   println("start looping...")
   data = CSV.read("../hyperspectral-unmixing-datasets/$(dataset)/data.csv", DataFrame)
@@ -44,7 +44,7 @@ function cache_result_hyprunmix(; overwrite=false, nysamples=15, multiplier=1,
     componentwise_losses = Vector{Vector{Float64}}(undef, length(results))
     Threads.@threads for i in eachindex(results)
       r = results[i]
-      componentwise_losses[i] = componentwise_loss(X, r.W * 1000, r.H; nysamples, approxargs=(; multiplier))
+      componentwise_losses[i] = componentwise_loss(X, r.W * 1000, r.H; nysamples, approxargs=())
     end
     jldsave("../result-cache-hyprunmix/$(dataset)/$(cache_name)/cache-$(nmf_alg)-hyprunmix-urban-$(filenameappend).jld2";
       results, componentwise_losses)
@@ -93,7 +93,7 @@ const stan_result_generation_synthetic = (;
     return results
   end
 )
-function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200,
+function cache_result_synthetic(; overwrite=false, nysamples=4000,
   result_generation=default_result_generation_synthetic, nmfargs=(), nmf_algs=[],
   componentwise_loss_method=componentwise_loss, outfilenameappend="")
 
@@ -114,7 +114,7 @@ function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200,
     "perturbed" => "-perturbed-0.0025"
   )
   cache_name_prepend, rgen = result_generation
-  cache_name = "$(cache_name_prepend)nys=$(nysamples)-multiplier=$(multiplier)"
+  cache_name = "$(cache_name_prepend)nys=$(nysamples)"
   nmf_algs = nmf_algs
 
   println("start looping...")
@@ -137,7 +137,7 @@ function cache_result_synthetic(; overwrite=false, nysamples=20, multiplier=200,
       componentwise_losses = Vector{Vector{Float64}}(undef, length(results))
       Threads.@threads for i in eachindex(results)
         r = results[i]
-        componentwise_losses[i] = componentwise_loss_method(X, r.W, r.H; nysamples, approxargs=(; multiplier))
+        componentwise_losses[i] = componentwise_loss_method(X, r.W, r.H; nysamples, approxargs=())
       end
       jldsave("../result-cache-synthetic/$(cache_name)/cache-$(nmf_alg)-$(cancer_categories[cancer])$(misspecification_type[misspec])$(outfilenameappend).jld2"; results, componentwise_losses)
     end
@@ -192,7 +192,7 @@ const stan_result_generation_real = (;
     return results
   end
 )
-function cache_result_real(; overwrite=false, nysamples=20, multiplier=200, result_generation=default_result_generation_real, ks=1:21, nmfargs=(), nmf_algs=[])
+function cache_result_real(; overwrite=false, nysamples=4000, result_generation=default_result_generation_real, ks=1:21, nmfargs=(), nmf_algs=[])
   println("program start...")
   cancer_categories = Dict(
     "skin" => "Skin-Melanoma",
@@ -202,7 +202,7 @@ function cache_result_real(; overwrite=false, nysamples=20, multiplier=200, resu
     "lung" => "Lung-SCC",
     "stomach" => "Stomach-AdenoCA")
   cache_name_prepend, rgen = result_generation
-  cache_name = "$(cache_name_prepend)nys=$(nysamples)-multiplier=$(multiplier)"
+  cache_name = "$(cache_name_prepend)nys=$(nysamples)"
   nmf_algs = nmf_algs
 
   println("start looping...")
@@ -225,7 +225,7 @@ function cache_result_real(; overwrite=false, nysamples=20, multiplier=200, resu
     componentwise_losses = Vector{Vector{Float64}}(undef, length(results))
     Threads.@threads for i in eachindex(results)
       r = results[i]
-      componentwise_losses[i] = componentwise_loss(X, r.W, r.H; nysamples, approxargs=(; multiplier))
+      componentwise_losses[i] = componentwise_loss(X, r.W, r.H; nysamples, approxargs=())
     end
     jldsave("../result-cache-real/$(cache_name)/cache-real-$(nmf_alg)-$(cancer_categories[cancer]).jld2"; results, componentwise_losses)
   end
@@ -309,7 +309,9 @@ function generate_plots_hyprunmix(; cache_name="nys=20-multiplier=1", dataset="u
   D, N = size(X)
 
   println("start looping...")
-  w_metric = (w, w_gt) -> 1 - (normalize(w)' * normalize(w_gt)) |> (x -> isnan(x) ? 1.0 : x)
+  w_metric1 = (w, w_gt) -> 1 - (normalize(w)' * normalize(w_gt)) |> (x -> isnan(x) ? 1.0 : x)
+  w_metric2 = (w, w_gt) -> norm(w - w_gt) |> (x -> isnan(x) ? 1.0 : x)
+  w_metric = (args...) -> 2w_metric1(args...) + w_metric2(args...)
   for nmf_alg in nmf_algs
     Base.Filesystem.mkpath("../plots/hyprunmix/$(dataset)/$(cache_name)/composite-$(nmf_alg)/pdf")
     Base.Filesystem.mkpath("../plots/hyprunmix/$(dataset)/$(cache_name)/composite-$(nmf_alg)/svg")
@@ -335,6 +337,7 @@ function generate_plots_hyprunmix(; cache_name="nys=20-multiplier=1", dataset="u
       signatures,
       results;
       w_metric,
+      colorrange=(0, 3),
       weighting_function=(wdiff, hdiff) -> wdiff
     )
     bubs_legend_and_colorbar = GridLayout()
@@ -393,10 +396,10 @@ function generate_plots_synthetic(; cache_name="nys=20-multiplier=200", nmf_algs
     # "skin" => "107-skin-melanoma-all-seed-1",
     # "ovary" => "113-ovary-adenoca-all-seed-1",
     # "breast" => "214-breast-all-seed-1",
-    "liver" => "326-liver-hcc-all-seed-1",
+    # "liver" => "326-liver-hcc-all-seed-1",
     # "lung" => "38-lung-adenoca-all-seed-1",
     # "stomach" => "75-stomach-adenoca-all-seed-1"
-    # "breast_custom" => "600-breast-custom-seed-1",
+    "breast_custom" => "600-breast-custom-seed-1",
   )
   misspecification_type = Dict(
     "none" => "",
@@ -560,7 +563,8 @@ end
 # cache_result_synthetic(; overwrite=true, result_generation=from_cache_synthetic("stan-nys=100-multiplier=150", "stan-"),
 #   nmf_algs=["stan"], nysamples=100, multiplier=150, componentwise_loss_method=StareNMF.componentwise_loss_noysample,
 #   outfilenameappend="-noYsample")
-# generate_plots_synthetic(; cache_name="stan-nys=100-multiplier=150", nmf_algs=["stan"], rho_choice=0.9, filenameappend="-noYsample")
+# generate_plots_synthetic(; cache_name="nys=20-multiplier=200", nmf_algs=["cd", "greedycd", "multdiv"], rho_choice=0.9, filenameappend="")
+generate_plots_synthetic(; cache_name="stan-nys=100-multiplier=150", nmf_algs=["stan"], rho_choice=0.9, filenameappend="")
 # generate_rho_performance_plots_synthetic(; cache_name="stan-nys=100-multiplier=150", nmf_algs=["stan"])
 
 # cache_result_real(; nmf_algs=["bssmf"])
@@ -568,14 +572,14 @@ end
 # generate_plots_real(; cache_name="nys=20-multiplier=200", nmf_algs=["multdiv", "greedycd", "bssmf", "alspgrad"])
 # generate_plots_real(; cache_name="musicatk-nys=20-multiplier=200", nmf_algs=["nmf", "lda", "nsnmf"])
 
-# generate_plots_hyprunmix(; cache_name="nys=15-multiplier=1", nmf_algs=["cd"], rhos=0:0.1:80, filenameappend="-simplexh")
+# generate_plots_hyprunmix(; cache_name="nys=15-multiplier=1", nmf_algs=["cd"], rhos=0:0.1:200, filenameappend="-l2h=m10000000000.0-shuffle-simplexh")
 # cache_result_hyprunmix(; overwrite=true, nmf_algs=["greedycd"], 
 #   nmfargs=(; init=:random, replicates=16, ncpu=16, maxiter=10000, lambda_w=0.0, lambda_h=0.11, simplex_H=true), 
 #   filenameappend="lw=0.0-lh=0.11-simplexh")
 
-cache_result_hyprunmix(; overwrite=true, nmf_algs=["cd"],
-  nmfargs=(; init=:nndsvda, replicates=16, ncpu=16, maxiter=10000, α=0.1, regularization=:components, l₁ratio=1.0, simplex_H=true),
-  filenameappend="l1h=0.1-simplexh")
+# cache_result_hyprunmix(; overwrite=true, nmf_algs=["cd"],
+#   nmfargs=(; init=:nndsvda, replicates=16, ncpu=16, maxiter=10000, α=0.1, regularization=:components, l₁ratio=1.0, simplex_H=true),
+#   filenameappend="l1h=0.1-simplexh")
 
 # cache_result_hyprunmix(; overwrite=true, nmf_algs=["alspgrad"],
 #   nmfargs=(; init=:random, replicates=16, ncpu=16, maxiter=10000, simplex_H=true), 

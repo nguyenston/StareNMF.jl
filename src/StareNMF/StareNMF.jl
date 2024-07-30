@@ -22,20 +22,7 @@ Distribution represented by a kernel density estimation over sample points
 struct KDEUniform{T<:AbstractFloat} <: UniformApproximate
   samples::Vector{T}
   estimated_distr::UnivariateKDE
-  KDEUniform(components::Vector{Tuple{T,T}}; multiplier::Integer=1, save_sample=false) where {T} = begin
-    samples = T[]
-    for (a, b) in components
-      if !(0 <= a <= b <= 1)
-        println("Warning: invalid component: a = $(a), b = $(b), skipped")
-        continue
-      end
-
-      if a < b
-        append!(samples, rand(Uniform(a, b), multiplier))
-      else
-        append!(samples, fill(a, multiplier))
-      end
-    end
+  KDEUniform(samples::Vector{Tuple{T,T}}; save_sample=false) where {T} = begin
     return new{T}(save_sample ? samples : T[], kde(samples, boundary=(0, 1), kernel=Epanechnikov))
   end
 end
@@ -101,10 +88,10 @@ function generate_empirical_eps_sets(X::Matrix{R}, W::Matrix{F}, H::Matrix{F}, a
   K = K_W
   N = N_X
 
-  eps_conditional = reshape([Tuple{Float64,Float64}[] for _ in 1:D*K], (D, K))
+  eps_conditional = reshape([Float64[] for _ in 1:D*K], (D, K))
 
-  y_to_eps_conditional = (y, Wdh) -> (cdf(Poisson(Wdh), y - 1), cdf(Poisson(Wdh), y))
-  for _ in 1:nysamples, n in 1:N
+  sample_eps = (y, lambda) -> Uniform(cdf(Poisson(lambda), y - 1), cdf(Poisson(lambda), y)) |> rand
+  for n in 1:N, _ in 1:nysamples
     x = X[:, n]
     h = H[:, n]
     Wdh = W * Diagonal(h)
@@ -115,7 +102,7 @@ function generate_empirical_eps_sets(X::Matrix{R}, W::Matrix{F}, H::Matrix{F}, a
     end
     y_dist = Multinomial.(x, sanity_check.(normalize.(eachrow(Wdh), 1)))
     y = reduce(hcat, rand.(y_dist)) |> transpose # DxK matrix
-    push!.(eps_conditional, y_to_eps_conditional.(y, Wdh))
+    push!.(eps_conditional, sample_eps.(y, Wdh))
   end
   return approx_type.(eps_conditional; approxargs...)
 end
