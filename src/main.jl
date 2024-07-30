@@ -44,7 +44,7 @@ function cache_result_hyprunmix(; overwrite=false, nysamples=15,
     componentwise_losses = Vector{Vector{Float64}}(undef, length(results))
     Threads.@threads for i in eachindex(results)
       r = results[i]
-      componentwise_losses[i] = componentwise_loss(X, r.W * 1000, r.H; nysamples, approxargs=(), sample_eps=sample_eps_normal(fill(2, i)))
+      componentwise_losses[i] = componentwise_loss(X, r.W * 1000, r.H; nysamples, approxargs=(), sample_eps=sample_eps_normal!(fill(2, i)))
     end
     jldsave("../result-cache-hyprunmix/$(dataset)/$(cache_name)/cache-$(nmf_alg)-hyprunmix-urban-$(filenameappend).jld2";
       results, componentwise_losses)
@@ -559,12 +559,12 @@ function generate_plots_real(; cache_name="nys=20-multiplier=200", nmf_algs=["mu
 end
 
 # cache_result_synthetic(; overwrite=true, result_generation=stan_result_generation_synthetic,  nmf_algs=["stan"], nysamples=100, multiplier=150)
-# cache_result_synthetic(; overwrite=true, nmf_algs=["multdiv"], nysamples=20, multiplier=200)
+cache_result_synthetic(; overwrite=true, nmf_algs=["multdiv"], nysamples=4000)
 # cache_result_synthetic(; overwrite=true, result_generation=from_cache_synthetic("stan-nys=100-multiplier=150", "stan-"),
 #   nmf_algs=["stan"], nysamples=100, multiplier=150, componentwise_loss_method=StareNMF.componentwise_loss_noysample,
 #   outfilenameappend="-noYsample")
 # generate_plots_synthetic(; cache_name="nys=20-multiplier=200", nmf_algs=["cd", "greedycd", "multdiv"], rho_choice=0.9, filenameappend="")
-generate_plots_synthetic(; cache_name="stan-nys=100-multiplier=150", nmf_algs=["stan"], rho_choice=0.9, filenameappend="")
+# generate_plots_synthetic(; cache_name="stan-nys=100-multiplier=150", nmf_algs=["stan"], rho_choice=0.9, filenameappend="")
 # generate_rho_performance_plots_synthetic(; cache_name="stan-nys=100-multiplier=150", nmf_algs=["stan"])
 
 # cache_result_real(; nmf_algs=["bssmf"])
@@ -572,7 +572,7 @@ generate_plots_synthetic(; cache_name="stan-nys=100-multiplier=150", nmf_algs=["
 # generate_plots_real(; cache_name="nys=20-multiplier=200", nmf_algs=["multdiv", "greedycd", "bssmf", "alspgrad"])
 # generate_plots_real(; cache_name="musicatk-nys=20-multiplier=200", nmf_algs=["nmf", "lda", "nsnmf"])
 
-# generate_plots_hyprunmix(; cache_name="nys=15-multiplier=1", nmf_algs=["cd"], rhos=0:0.1:200, filenameappend="-l2h=m10000000000.0-shuffle-simplexh")
+generate_plots_hyprunmix(; cache_name="nys=15-multiplier=1", nmf_algs=["cd"], rhos=0:0.1:200, filenameappend="-l2h=m1e100-shuffle-simplexh")
 # cache_result_hyprunmix(; overwrite=true, nmf_algs=["greedycd"], 
 #   nmfargs=(; init=:random, replicates=16, ncpu=16, maxiter=10000, lambda_w=0.0, lambda_h=0.11, simplex_H=true), 
 #   filenameappend="lw=0.0-lh=0.11-simplexh")
