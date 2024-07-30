@@ -44,9 +44,10 @@ end
 TODO: Add documentation
 """
 function componentwise_loss(X::Matrix{R}, W::Matrix{F}, H::Matrix{F};
-  approx_type::Type{T}=KDEUniform, nysamples::Integer=1, approxargs=()) where {T<:UniformApproximate,F<:AbstractFloat,R<:Real}
+  approx_type::Type{T}=KDEUniform, nysamples::Integer=1,
+  sample_eps=sample_eps_poisson, approxargs=()) where {T<:UniformApproximate,F<:AbstractFloat,R<:Real}
 
-  empirical_eps = generate_empirical_eps_sets(X, W, H, approx_type; nysamples, approxargs)
+  empirical_eps = generate_empirical_eps_sets(X, W, H, approx_type; nysamples, approxargs, sample_eps)
   return dropdims(sum(KL_distance_from_standard_uniform.(empirical_eps); dims=1); dims=1)
 end
 
