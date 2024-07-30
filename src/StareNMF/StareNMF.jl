@@ -5,7 +5,7 @@ module StareNMF
 include("./utils/utils.jl")
 
 export UniformApproximate
-export PiecewiseUniform, KDEUniform
+export KDEUniform
 export KL_distance_from_standard_uniform
 export generate_empirical_eps_sets, structurally_aware_loss
 export componentwise_loss, stare_from_componentwise_loss
