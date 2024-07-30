@@ -44,7 +44,7 @@ function cache_result_hyprunmix(; overwrite=false, nysamples=15,
     componentwise_losses = Vector{Vector{Float64}}(undef, length(results))
     Threads.@threads for i in eachindex(results)
       r = results[i]
-      componentwise_losses[i] = componentwise_loss(X, r.W * 1000, r.H; nysamples, approxargs=())
+      componentwise_losses[i] = componentwise_loss(X, r.W * 1000, r.H; nysamples, approxargs=(), sample_eps=sample_eps_normal(fill(2, i)))
     end
     jldsave("../result-cache-hyprunmix/$(dataset)/$(cache_name)/cache-$(nmf_alg)-hyprunmix-urban-$(filenameappend).jld2";
       results, componentwise_losses)
