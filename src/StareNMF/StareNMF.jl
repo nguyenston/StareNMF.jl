@@ -17,44 +17,6 @@ using LinearAlgebra
 abstract type UniformApproximate end
 
 """
-Distribution represented by a series of bins with width and height
-"""
-struct PiecewiseUniform{T<:AbstractFloat} <: UniformApproximate
-  data::Vector{Tuple{T,T}}
-  ledge_list::Vector{Tuple{T,T}} # for logging
-  components::Vector{Tuple{T,T}} # for logging
-
-  PiecewiseUniform(components::Vector{Tuple{T,T}}; tol::T=1e-4) where {T} = begin
-    n = length(components)
-    ledge_list = []
-    for (a, b) in components
-      # sanity guards
-      @assert 0 <= a <= b <= 1 "invalid component: a = $(a), b = $(b)"
-      if a == b
-        continue
-      end
-
-      px = 1 / (b - a) / n
-      push!(ledge_list, (a, px))
-      push!(ledge_list, (b, -px))
-    end
-    sort!(ledge_list; by=first)
-
-    height = 0
-    data = []
-    for i = 1:length(ledge_list)-1
-      height += ledge_list[i][2]
-      if abs(height) < tol
-        height = max(0, height)
-      end
-      width = ledge_list[i+1][1] - ledge_list[i][1]
-      push!(data, (width, height))
-    end
-    return new{T}(data, ledge_list, components)
-  end
-end
-
-"""
 Distribution represented by a kernel density estimation over sample points
 """
 struct KDEUniform{T<:AbstractFloat} <: UniformApproximate
@@ -81,19 +43,6 @@ end
 """
 Compute the KL Divergence D_KL(d|Uniform(0,1))
 """
-function KL_distance_from_standard_uniform(d::PiecewiseUniform)
-  function loss_map((w, h))
-    @assert h >= 0 "negative h: $(h)"
-    w * h * log(h)
-  end
-  losses = loss_map.(d.data)
-  valid_losses = losses[.!isnan.(losses)]
-  return sum(valid_losses)
-end
-
-"""
-Compute the KL Divergence D_KL(d|Uniform(0,1))
-"""
 function KL_distance_from_standard_uniform(d::KDEUniform)
   distr = d.estimated_distr
   width = step(distr.x)
@@ -103,6 +52,9 @@ function KL_distance_from_standard_uniform(d::KDEUniform)
   return sum(valid_losses)
 end
 
+"""
+TODO: Add documentation
+"""
 function componentwise_loss(X::Matrix{R}, W::Matrix{F}, H::Matrix{F};
   approx_type::Type{T}=KDEUniform, nysamples::Integer=1, approxargs=()) where {T<:UniformApproximate,F<:AbstractFloat,R<:Real}
 
@@ -152,7 +104,7 @@ function generate_empirical_eps_sets(X::Matrix{R}, W::Matrix{F}, H::Matrix{F}, a
   eps_conditional = reshape([Tuple{Float64,Float64}[] for _ in 1:D*K], (D, K))
 
   y_to_eps_conditional = (y, Wdh) -> (cdf(Poisson(Wdh), y - 1), cdf(Poisson(Wdh), y))
-  for _ in 1:nysamples, n = 1:N
+  for _ in 1:nysamples, n in 1:N
     x = X[:, n]
     h = H[:, n]
     Wdh = W * Diagonal(h)
