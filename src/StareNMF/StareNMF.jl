@@ -85,7 +85,11 @@ function sample_eps_poisson(x, W, h)
   y_dist = Multinomial.(x, sanity_check.(normalize.(eachrow(Wdh), 1)))
   y = reduce(hcat, rand.(y_dist)) |> transpose # DxK matrix
 
-  sample_eps = (y, lambda) -> Uniform(cdf(Poisson(lambda), y - 1), cdf(Poisson(lambda), y)) |> rand
+  sample_eps = (y, lambda) -> begin
+    a = cdf(Poisson(lambda), y - 1)
+    b = cdf(Poisson(lambda), y)
+    return a < b ? Uniform(a, b) |> rand : b
+  end
   return sample_eps.(y, Wdh)
 end
 
