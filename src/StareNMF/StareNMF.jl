@@ -23,7 +23,7 @@ Distribution represented by a kernel density estimation over sample points
 struct KDEUniform{T<:AbstractFloat} <: UniformApproximate
   samples::Vector{T}
   estimated_distr::UnivariateKDE
-  KDEUniform(samples::Vector{Tuple{T,T}}; save_sample=false) where {T} = begin
+  KDEUniform(samples::Vector{T}; save_sample=false) where {T} = begin
     return new{T}(save_sample ? samples : T[], kde(samples, boundary=(0, 1), kernel=Epanechnikov))
   end
 end
