@@ -111,7 +111,7 @@ function sample_eps_normal!(sigs::Vector{Float64})
         cum_sig = sum(sigs)
         cum_mu = sum(@view Wdh[d, :])
         cum_x = x[d]
-        for k in 1:K
+        for k in 1:K-1
           this_mu = Wdh[d, k]
           this_sig = sigs[k]
           cum_mu -= this_mu
@@ -124,6 +124,7 @@ function sample_eps_normal!(sigs::Vector{Float64})
           ys[d, k] = y
           cum_x -= y
         end
+        ys[d, K] = cum_x
       end
       push!.(eps_conditional, sample_eps.(ys, Wdh, sigs |> transpose))
     end
