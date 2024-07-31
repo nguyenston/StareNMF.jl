@@ -74,7 +74,7 @@ function structurally_aware_loss(X::Matrix{R}, W::Matrix{F}, H::Matrix{F}, rho::
   return [sum(max.(0, componentwise_loss .- rh)) + lambda * K for rh in rho]
 end
 
-function sample_eps_poisson!(x, Wdh; nys, eps_conditional)
+function sample_eps_poisson!(x, W, h; nys, eps_conditional)
   sanity_check = v -> if isnan(v[1])
     return ones(length(v)) / length(v)
   else
@@ -86,6 +86,7 @@ function sample_eps_poisson!(x, Wdh; nys, eps_conditional)
     return a < b ? Uniform(a, b) |> rand : b
   end
 
+  Wdh = W * Diagonal(h)
   y_dist = Multinomial.(x, sanity_check.(normalize.(eachrow(Wdh), 1)))
   for _ in 1:nys
     ys = reduce(hcat, rand.(y_dist)) |> transpose # DxK matrix
@@ -94,7 +95,8 @@ function sample_eps_poisson!(x, Wdh; nys, eps_conditional)
 end
 
 function sample_eps_normal!(sigs::Vector{Float64})
-  return (x, Wdh; nys, eps_conditional) -> begin
+  return (x, W, h; nys, eps_conditional) -> begin
+    Wdh = W * Diagonal(h)
     D, K = size(Wdh)
     @assert length(sigs) == K "Expected sigs to have length $(K), got length $(length(sigs))"
 
@@ -147,8 +149,7 @@ function generate_empirical_eps_sets(X::Matrix{R}, W::Matrix{F}, H::Matrix{F}, a
   for n in 1:N
     x = @view X[:, n]
     h = @view H[:, n]
-    Wdh = W * Diagonal(h)
-    sample_eps(x, Wdh; nys=nysamples, eps_conditional) # this mutates eps_conditional
+    sample_eps(x, W, h; nys=nysamples, eps_conditional) # this mutates eps_conditional
   end
   return approx_type.(eps_conditional; approxargs...)
 end
