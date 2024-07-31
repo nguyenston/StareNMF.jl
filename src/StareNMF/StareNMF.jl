@@ -108,17 +108,17 @@ function sample_eps_normal!(sigs::Vector{Float64})
     for _ in 1:nys
       ys = Array{Float64}(undef, (D, K))
       for d in 1:D
-        cum_sig = sum(sigs)
+        cum_sig_sq = sum(sigs .^ 2)
         cum_mu = sum(@view Wdh[d, :])
         cum_x = x[d]
         for k in 1:K-1
           this_mu = Wdh[d, k]
           this_sig = sigs[k]
           cum_mu -= this_mu
-          cum_sig -= this_sig
+          cum_sig_sq -= this_sig^2
 
           n_y = Normal(this_mu, this_sig)
-          n_rest = Normal(cum_mu, cum_sig)
+          n_rest = Normal(cum_mu, sqrt(cum_sig_sq))
           y = rand(deconvolve_normal(cum_x, n_y, n_rest))
 
           ys[d, k] = y
