@@ -23,7 +23,7 @@ function rank_determination(X, ks; nmfargs=())
   results
 end
 
-function cache_result_hyprunmix(; overwrite=false, nysamples=15,
+function cache_result_hyprunmix(; overwrite=false, nysamples=5,
   dataset="urban", nmf_algs=["bssmf"], nmfargs=(), filenameappend="")
   println("program start...")
   cache_name = "nys=$(nysamples)"
