@@ -127,7 +127,7 @@ function sample_eps_normal!(sigmas::Matrix{Float64})
         end
         ys[d, K] = cum_x
       end
-      push!.(eps_conditional, sample_eps.(ys, Wdh, sigs |> transpose))
+      push!.(eps_conditional, sample_eps.(ys, Wdh, sigmas))
     end
   end
 end
