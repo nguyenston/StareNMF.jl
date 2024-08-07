@@ -94,11 +94,11 @@ function sample_eps_poisson!(x, W, h; nys, eps_conditional)
   end
 end
 
-function sample_eps_normal!(sigs::Vector{Float64})
+function sample_eps_normal!(sigmas::Matrix{Float64})
   return (x, W, h; nys, eps_conditional) -> begin
     Wdh = W * Diagonal(h)
     D, K = size(Wdh)
-    @assert length(sigs) == K "Expected sigs to have length $(K), got length $(length(sigs))"
+    @assert size(sigmas) == size(W) "Expected sigmas to have the same dim as W: $(size(W)), got $(size(sigmas))"
 
     mu = (m1, m2, s1, s2) -> (s1^-2 * m1 - s2^-2 * m2) / (s1^-2 + s2^-2)
     sig = (s1, s2) -> s1 * s2 / sqrt(s1^2 + s2^2)
@@ -108,6 +108,7 @@ function sample_eps_normal!(sigs::Vector{Float64})
     for _ in 1:nys
       ys = Array{Float64}(undef, (D, K))
       for d in 1:D
+        sigs = @view sigmas[d, :]
         cum_sig_sq = sum(sigs .^ 2)
         cum_mu = sum(@view Wdh[d, :])
         cum_x = x[d]
