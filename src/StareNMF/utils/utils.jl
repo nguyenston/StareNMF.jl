@@ -4,8 +4,15 @@ export signature_plot, signature_side2side, signature_bestmatch, bubbles, rho_k_
 export compare_against_gt, BIC, rho_k_bottom
 export rho_performance_factory
 
+using NMF
+using BSSMF
+using Printf
+using MultivariateStats
+using Statistics
+
 include("./plotutils.jl")
 include("./nmfutils.jl")
+include("./mvcnmf.jl")
 
 using Distributions
 

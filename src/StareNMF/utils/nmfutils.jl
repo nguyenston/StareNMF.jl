@@ -1,7 +1,3 @@
-using NMF
-using BSSMF
-using Printf
-
 function nmf_skeleton!(updater::NMF.NMFUpdater{T},
   X, W::Matrix{T}, H::Matrix{T},
   maxiter::Int, verbose::Bool, tol, simplex_H) where {T}
@@ -13,7 +9,7 @@ function nmf_skeleton!(updater::NMF.NMFUpdater{T},
   preH = Matrix{T}(undef, size(H))
   if verbose
     start = time()
-    objv = NMF.evaluate_objv(updater, state, X, W, H)
+    objv = evaluate_objv(updater, state, X, W, H)
     @printf("%-5s    %-13s    %-13s    %-13s    %-13s\n", "Iter", "Elapsed time", "objv", "objv.change", "(W & H).change")
     @printf("%5d    %13.6e    %13.6e\n", 0, 0.0, objv)
   end
@@ -43,7 +39,7 @@ function nmf_skeleton!(updater::NMF.NMFUpdater{T},
     if verbose
       elapsed = time() - start
       preobjv = objv
-      objv = NMF.evaluate_objv(updater, state, X, W, H)
+      objv = evaluate_objv(updater, state, X, W, H)
       @printf("%5d    %13.6e    %13.6e    %13.6e\n",
         t, elapsed, objv, objv - preobjv)
     end
@@ -54,6 +50,9 @@ function nmf_skeleton!(updater::NMF.NMFUpdater{T},
   end
   return NMF.Result{T}(W, H, t, converged, objv)
 end
+
+# generic implementation
+evaluate_objv(updater, state, X, W, H) = NMF.evaluate_objv(updater, state, X, W, H)
 
 function stop_condition(W::AbstractArray{T}, preW::AbstractArray, H::AbstractArray, preH::AbstractArray, eps::AbstractFloat) where {T}
   for j in axes(W, 2)
@@ -84,6 +83,11 @@ custom_solve!(alg::NMF.CoordinateDescent{T}, X, W, H, simplex_H=false) where {T}
   nmf_skeleton!(NMF.CoordinateDescentUpd{T}(alg.α, alg.l₁ratio, alg.regularization, alg.shuffle, alg.update_H),
     X, W, H, alg.maxiter, alg.verbose, alg.tol, simplex_H)
 
+custom_solve!(alg::MinVolConstrained{T}, X, W, H, simplex_H=false) where {T} =
+  nmf_skeleton!(MinVolConstrainedUpd(alg.eta, alg.eta_decay, alg.eta_tol, alg.delta, alg.lambda, alg.maxsubiter, alg.update_H),
+    X, W, H, alg.maxiter, alg.verbose, alg.tol, simplex_H)
+
+# generic implementation
 custom_solve!(alg::NMF.SPA{T}, X, W, H, _) where {T} = NMF.solve!(alg, X, W, H)
 
 function custom_solve!(alg::NMF.MultUpdate{T}, X, W, H, simplex_H=false) where {T}
@@ -163,6 +167,8 @@ function run_nmf(X::AbstractMatrix{T}, k::Integer;
     alginst = NMF.CoordinateDescent{T}(; maxiter, tol, verbose, update_H, kwargs...)
   elseif alg == :greedycd
     alginst = NMF.GreedyCD{T}(; maxiter, tol, verbose, update_H, kwargs...)
+  elseif alg == :mvc
+    alginst = MinVolConstrained{T}(; maxiter, tol, verbose, update_H, kwargs...)
   elseif alg == :spa
     if init != :spa
       throw(ArgumentError("Invalid value for init, use :spa instead."))
