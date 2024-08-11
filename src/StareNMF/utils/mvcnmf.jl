@@ -99,15 +99,13 @@ function _update_W!(upd::MinVolConstrainedUpd{T}, s::MinVolConstrainedState{T},
   detZ = det(Z)
   old_obj = evaluate_objv(upd, s, X, W, H)
 
-
   W_new = Matrix{T}(undef, size(W))
   grad_frobenius = (W * H - X) * Ht
+  grad = grad_frobenius
+  if !isapprox(detZ, 0; atol=1e-8, rtol=1e-5)
+    grad += s.tau * detZ^2 * UBt * transpose(inv(Z))        # adds volume regularization
+  end
   for m in 0:inner_iter-1
-    grad = grad_frobenius
-    if !isapprox(detZ, 0; atol=1e-8, rtol=1e-5)
-      grad .+= s.tau * detZ^2 * UBt * transpose(inv(Z))        # adds volume regularization
-    end
-
     W_new .= max.(0, W - upd.eta * upd.eta_decay^m * grad)
     new_obj = evaluate_objv(upd, s, X, W_new, H)
     armijo = upd.eta_tol * upd.eta * upd.eta_decay^m * sum(grad .* (W_new - W))

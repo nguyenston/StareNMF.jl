@@ -85,9 +85,11 @@ custom_solve!(alg::NMF.CoordinateDescent{T}, X, W, H, simplex_H=false) where {T}
   nmf_skeleton!(NMF.CoordinateDescentUpd{T}(alg.α, alg.l₁ratio, alg.regularization, alg.shuffle, alg.update_H),
     X, W, H, alg.maxiter, alg.verbose, alg.tol, simplex_H)
 
-custom_solve!(alg::MinVolConstrained{T}, X, W, H, simplex_H=false) where {T} =
+custom_solve!(alg::MinVolConstrained{T}, X, W, H, simplex_H=false) where {T} = begin
+  BSSMF.condatProj!(H)
   nmf_skeleton!(MinVolConstrainedUpd(alg.eta, alg.eta_decay, alg.eta_tol, alg.delta, alg.lambda, alg.maxsubiter, alg.update_H),
     X, W, H, alg.maxiter, alg.verbose, alg.tol, simplex_H)
+end
 
 # generic implementation
 custom_solve!(alg::NMF.SPA{T}, X, W, H, _) where {T} = NMF.solve!(alg, X, W, H)
