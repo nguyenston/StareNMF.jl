@@ -9,12 +9,12 @@ using BSSMF
 using Printf
 using MultivariateStats
 using Statistics
+using Distributions
 
 include("./plotutils.jl")
-include("./nmfutils.jl")
 include("./mvcnmf.jl")
+include("./nmfutils.jl")
 
-using Distributions
 
 """
 The generalized inverse of the cdf of a univariate measure

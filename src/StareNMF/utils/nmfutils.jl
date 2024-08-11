@@ -4,7 +4,7 @@ function nmf_skeleton!(updater::NMF.NMFUpdater{T},
   objv = convert(T, NaN)
 
   # init
-  state = NMF.prepare_state(updater, X, W, H)
+  state = prepare_state(updater, X, W, H)
   preW = Matrix{T}(undef, size(W))
   preH = Matrix{T}(undef, size(H))
   if verbose
@@ -27,7 +27,7 @@ function nmf_skeleton!(updater::NMF.NMFUpdater{T},
     copyto!(preH, H)
 
     # update H
-    NMF.update_wh!(updater, state, X, W, H)
+    update_wh!(updater, state, X, W, H)
     if simplex_H
       BSSMF.condatProj!(H)
     end
@@ -46,13 +46,15 @@ function nmf_skeleton!(updater::NMF.NMFUpdater{T},
   end
 
   if !verbose
-    objv = NMF.evaluate_objv(updater, state, X, W, H)
+    objv = evaluate_objv(updater, state, X, W, H)
   end
   return NMF.Result{T}(W, H, t, converged, objv)
 end
 
 # generic implementation
-evaluate_objv(updater, state, X, W, H) = NMF.evaluate_objv(updater, state, X, W, H)
+prepare_state(upd::NMF.NMFUpdater{T}, X, W, H) where {T} = NMF.prepare_state(upd, X, W, H)
+update_wh!(upd::NMF.NMFUpdater{T}, state, X, W, H) where {T} = NMF.update_wh!(upd, state, X, W, H)
+evaluate_objv(upd::NMF.NMFUpdater{T}, state, X, W, H) where {T} = NMF.evaluate_objv(upd, state, X, W, H)
 
 function stop_condition(W::AbstractArray{T}, preW::AbstractArray, H::AbstractArray, preH::AbstractArray, eps::AbstractFloat) where {T}
   for j in axes(W, 2)
