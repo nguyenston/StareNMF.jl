@@ -1,3 +1,66 @@
+"""
+Projection of vector onto the L1 simplex
+"""
+function condatProj!(y::AbstractArray{T,1}, epsilon::T=zero(T)) where {T<:AbstractFloat}
+  a = 1
+  N = size(y, 1)
+  vtilde = Array{Int}(undef, N)
+  v = Array{Int}(undef, N)
+  v[1] = 1
+  vlength = 1
+  vtildelength = 0
+  rho = y[1] - a
+  for n in 2:N
+    if y[n] > rho
+      rho += (y[n] - rho) / (vlength + 1)
+      if rho > y[n] - a
+        vlength += 1
+        v[vlength] = n
+      else
+        vtilde[vtildelength+1:vtildelength+vlength] = v[1:vlength]
+        vtildelength += vlength
+        v[1] = n
+        vlength = 1
+        rho = y[n] - a
+      end
+    end
+  end
+  if vtildelength != 0
+    for i in 1:vtildelength
+      yv = y[vtilde[i]]
+      if yv > rho
+        vlength += 1
+        v[vlength] = vtilde[i]
+        rho += (yv - rho) / vlength
+      end
+    end
+  end
+  vlengthold = vlength - 1
+  while vlengthold != vlength
+    vlengthold = vlength
+    i = 1
+    while i <= vlength
+      yv = y[v[i]]
+      if yv <= rho
+        v[i] = v[vlength]
+        vlength -= 1
+        rho += (rho - yv) / vlength
+      else
+        i += 1
+      end
+    end
+  end
+  for i in 1:N
+    yimrho = y[i] - rho
+    if yimrho < epsilon
+      y[i] = epsilon
+    else
+      y[i] = yimrho
+    end
+  end
+  return nothing
+end;
+
 function nmf_skeleton!(updater::NMF.NMFUpdater{T},
   X, W::Matrix{T}, H::Matrix{T},
   maxiter::Int, verbose::Bool, tol, simplex_H) where {T}
@@ -18,7 +81,7 @@ function nmf_skeleton!(updater::NMF.NMFUpdater{T},
   converged = false
   t = 0
   if simplex_H
-    BSSMF.condatProj!(H)
+    condatProj!(H)
   end
 
   while !converged && t < maxiter
@@ -29,7 +92,7 @@ function nmf_skeleton!(updater::NMF.NMFUpdater{T},
     # update H
     update_wh!(updater, state, X, W, H)
     if simplex_H
-      BSSMF.condatProj!(H)
+      condatProj!(H)
     end
 
     # determine convergence
@@ -105,6 +168,11 @@ end
 
 # custom_solve!(alg, X, W, H, _) = NMF.solve!(alg, X, W, H)
 
+"""
+Modified internal high-level routine similar to that of NMF.jl
+Added minimum volume constrained NMF as a usable algorithm
+Added the ability to specify algorithm specific arguments
+"""
 function run_nmf(X::AbstractMatrix{T}, k::Integer;
   init::Symbol=:nndsvdar,
   initdata=nothing,

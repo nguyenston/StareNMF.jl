@@ -10,7 +10,7 @@ mutable struct MinVolConstrained{T}
   maxsubiter::Int
   eta::T           # initial learning rate
   eta_decay::T     # rate of decay of learning rate, should be in range [0, 1]
-  eta_tol::T       # a multiplier to eta, controls the rate of descent
+  eta_tol::T       # a multiplier to eta, controls the rate of descent, smaller => more strict
   delta::T         # strength of column-stochasticity constraint
   lambda::T        # strength of volume regularization
 
@@ -20,11 +20,11 @@ mutable struct MinVolConstrained{T}
     tol::Real=cbrt(eps(T)),
     update_H::Bool=true,
     maxsubiter::Int=15,
-    eta::T=convert(T, 1000),
+    eta::T=convert(T, 1e-3),
     eta_decay::T=convert(T, 0.5),
-    eta_tol::T=convert(T, 1e-4),
+    eta_tol::T=convert(T, 1e-1),
     delta::T=convert(T, 5),
-    lambda::T=convert(T, 0.5)) where {T}
+    lambda::T=convert(T, 1)) where {T}
 
     return new{T}(maxiter, verbose, tol, update_H, maxsubiter, eta, eta_decay, eta_tol, delta, lambda)
   end

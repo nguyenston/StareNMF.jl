@@ -41,7 +41,9 @@ function KL_distance_from_standard_uniform(d::KDEUniform)
 end
 
 """
-TODO: Add documentation
+Returns a vector whose sum is the structurally aware loss when rho=0
+nysamples: how many times to empirically sample y, larger value leads to more accurate approximation
+sample_eps: a function that samples eps according to the assumed model
 """
 function componentwise_loss(X::Matrix{R}, W::Matrix{F}, H::Matrix{F};
   approx_type::Type{T}=KDEUniform, nysamples::Integer=1,
@@ -51,11 +53,17 @@ function componentwise_loss(X::Matrix{R}, W::Matrix{F}, H::Matrix{F};
   return dropdims(sum(KL_distance_from_standard_uniform.(empirical_eps); dims=1); dims=1)
 end
 
+"""
+Compute the structurally aware loss from the output of the function componentwise_loss
+"""
 function stare_from_componentwise_loss(cwl, rho; lambda=0.01)
   K = length(cwl)
   return sum(max.(0, cwl .- rho)) + lambda * K
 end
 
+"""
+componentwise_loss and stare_from_componentwise_loss folded into one function
+"""
 function structurally_aware_loss(X::Matrix{R}, W::Matrix{F}, H::Matrix{F}, rho::F;
   lambda::F=0.01, approx_type::Type{T}=KDEUniform,
   kwargs...) where {T<:UniformApproximate,F<:AbstractFloat,R<:Real}
@@ -65,6 +73,9 @@ function structurally_aware_loss(X::Matrix{R}, W::Matrix{F}, H::Matrix{F}, rho::
   return sum(max.(0, componentwise_loss .- rho)) + lambda * K
 end
 
+"""
+Vectorized structurally_aware_loss w.r.t. rho
+"""
 function structurally_aware_loss(X::Matrix{R}, W::Matrix{F}, H::Matrix{F}, rho::Vector{F};
   lambda::F=0.01, approx_type::Type{T}=KDEUniform,
   kwargs...) where {T<:UniformApproximate,F<:AbstractFloat,R<:Real}
@@ -132,6 +143,9 @@ function sample_eps_normal!(sigmas::Matrix{Float64})
   end
 end
 
+"""
+Internal function to sample eps, return a UniformApproximate struct, which can be used in divergence computation
+"""
 function generate_empirical_eps_sets(X::Matrix{R}, W::Matrix{F}, H::Matrix{F}, approx_type::Type{T};
   nysamples::Integer=20, approxargs=(), sample_eps=sample_eps_poisson!) where {T<:UniformApproximate,F<:AbstractFloat,R<:Real}
 

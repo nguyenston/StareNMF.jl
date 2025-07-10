@@ -35,7 +35,7 @@ function signature_plot(gridpos, signature; title="")
 end
 
 """
-TODO: add documentation
+Returns a function that maps rho to the worst performing score
 """
 function rho_performance_factory(gt_loadings::DataFrame, gt_signatures::DataFrame, nmf_results::Vector{NMF.Result{T}}, componentwise_losses;
   weighting_function=(wdiff, hdiff) -> wdiff + tanh(0.2hdiff),
@@ -88,11 +88,12 @@ function rho_performance_factory(gt_loadings::DataFrame, gt_signatures::DataFram
 end
 
 """
-TODO: add documentation
+Makie plot of structurally aware loss with respect to rho and k
 """
 function rho_k_losses(gridpos, componentwise_losses, rhos; lambda=0.01, plot_title="", rho_choice=Nothing)
   subfig = GridLayout()
-  ax = Axis(gridpos; yscale=log10, title=plot_title)
+  ax = Axis(gridpos; yscale=log10, xlabel=L"\rho", xlabelsize=20, ylabelsize=20,
+    ylabel=L"\mathcal{R}^{\rho}", title=plot_title, limits=((0, maximum(rhos) * 1.0), nothing))
   for cwl in componentwise_losses
     K = length(cwl)
     stare_loss = [sum(max.(0, cwl .- rh)) + lambda * K for rh in rhos]
@@ -105,13 +106,14 @@ function rho_k_losses(gridpos, componentwise_losses, rhos; lambda=0.01, plot_tit
   end
 
   subfig[1, 1] = ax
-  subfig[1, 2] = Legend(gridpos, ax, "Legend")
+  axislegend(ax; orientation=:vertical, valign=:top, nbanks=2)
+  # subfig[1, 2] = Legend(gridpos, ax, "Legend")
   gridpos[] = subfig
   return subfig, ax
 end
 
 """
-TODO: maybe a better name? Add documentation
+A plot of that shows the minimum rho to get the structurally aware loss to be zero, w.r.t. the number of components K
 """
 function rho_k_bottom(gridpos, componentwise_losses; plot_title="")
   zero_points = componentwise_losses .|> l -> (length(l), maximum(l))
@@ -262,17 +264,6 @@ function compare_against_gt(gt_loadings::DataFrame, gt_signatures::DataFrame, nm
   return (maximum([h_diffs[i, gt] for (i, gt) in enumerate(assignment)]),
     maximum([w_diffs[i, gt] for (i, gt) in enumerate(assignment)]))
 end
-
-"""
-TODO: add documentation
-"""
-function BIC(X, nmf_result::NMF.Result{T}; model=(mu, sigma) -> Normal(mu, sigma), modelargs=(1,)) where {T}
-  K, N = size(nmf_result.H)
-  WH = nmf_result.W * nmf_result.H
-  lpdf = logpdf.(model.(WH, modelargs...), X)
-  return K * log(N) - 2sum(lpdf) + 2log(factorial(big(K)))
-end
-
 
 """
 Bipartite match inferred results against ground truth signatures
